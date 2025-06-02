@@ -1,20 +1,21 @@
-﻿using MagentaTV.Models;
-using MagentaTV.Configuration;
+﻿using MagentaTV.Configuration;
+using MagentaTV.Models;
+using MagentaTV.Services.TokenStorage;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Extensions.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Xml.Linq;
-using Polly;
-using Polly.Extensions.Http;
 
 namespace MagentaTV.Services;
 
-public class Magenta : IMagenta
+public class MagentaService : IMagenta
 {
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
-    private readonly ILogger<Magenta> _logger;
+    private readonly ILogger<MagentaService> _logger;
     private readonly MagentaTVOptions _options;
     private readonly CacheOptions _cacheOptions;
     private readonly string _devId;
@@ -23,12 +24,13 @@ public class Magenta : IMagenta
     private string? _refreshToken;
     private DateTime _tokenExpiry = DateTime.MinValue;
 
-    public Magenta(
+    public MagentaService(
         HttpClient httpClient,
         IMemoryCache cache,
-        ILogger<Magenta> logger,
+        ILogger<MagentaService> logger,
         IOptions<MagentaTVOptions> options,
-        IOptions<CacheOptions> cacheOptions)
+        IOptions<CacheOptions> cacheOptions,
+        ITokenStorage? tokenStorage = null)
     {
         _httpClient = httpClient;
         _cache = cache;
@@ -465,27 +467,26 @@ public class Magenta : IMagenta
     private async Task RefreshTokenAsync()
     {
         if (string.IsNullOrEmpty(_refreshToken))
+        {
             throw new UnauthorizedAccessException("Refresh token not available. Please login again.");
+        }
 
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/{_options.ApiVersion}/auth/tokens")
-            {
-                Content = new StringContent(
-                    JsonSerializer.Serialize(new { refreshToken = _refreshToken }),
-                    System.Text.Encoding.UTF8,
-                    "application/json")
-            };
-            // NEposílej Authorization, není potřeba!
+            var request = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/{_options.ApiVersion}/auth/refresh");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _refreshToken);
+
             var response = await _httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
 
             var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
             if (json.RootElement.TryGetProperty("token", out var token))
             {
                 _accessToken = token.GetProperty("accessToken").GetString();
                 _refreshToken = token.GetProperty("refreshToken").GetString();
                 _tokenExpiry = DateTime.UtcNow.AddHours(1);
+
                 _logger.LogInformation("Token refreshed successfully");
             }
         }

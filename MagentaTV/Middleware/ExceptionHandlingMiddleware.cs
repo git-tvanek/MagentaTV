@@ -1,7 +1,4 @@
-﻿// MagentaTV/Middleware/ExceptionHandlingMiddleware.cs
-using System.Diagnostics;
-using System.Net;
-using System.Text;
+﻿using System.Net;
 using System.Text.Json;
 
 namespace MagentaTV.Middleware;
