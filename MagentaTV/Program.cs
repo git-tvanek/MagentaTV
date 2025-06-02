@@ -163,7 +163,7 @@ builder.Services.AddHealthChecks()
     {
         return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("API is running");
     })
-    .AddCheck("token-storage", async () =>
+    .AddAsyncCheck("token-storage", async () =>
     {
         try
         {

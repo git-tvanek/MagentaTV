@@ -11,11 +11,11 @@ using System.Xml.Linq;
 
 namespace MagentaTV.Services;
 
-public class MagentaService : IMagenta
+public class Magenta : IMagenta
 {
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
-    private readonly ILogger<MagentaService> _logger;
+    private readonly ILogger<Magenta> _logger;
     private readonly MagentaTVOptions _options;
     private readonly CacheOptions _cacheOptions;
     private readonly string _devId;
@@ -24,10 +24,10 @@ public class MagentaService : IMagenta
     private string? _refreshToken;
     private DateTime _tokenExpiry = DateTime.MinValue;
 
-    public MagentaService(
+    public Magenta(
         HttpClient httpClient,
         IMemoryCache cache,
-        ILogger<MagentaService> logger,
+        ILogger<Magenta> logger,
         IOptions<MagentaTVOptions> options,
         IOptions<CacheOptions> cacheOptions,
         ITokenStorage? tokenStorage = null)
