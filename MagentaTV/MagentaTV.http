@@ -1,0 +1,6 @@
+@MagentaTV_HostAddress = http://localhost:5247
+
+GET {{MagentaTV_HostAddress}}/magenta/
+Accept: application/json
+
+###
