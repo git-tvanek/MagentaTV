@@ -1,4 +1,3 @@
-// MagentaTV/Program.cs
 using MagentaTV.Services;
 using MagentaTV.Services.TokenStorage;
 using MagentaTV.Middleware;
@@ -40,20 +39,8 @@ builder.Services.AddControllers(options =>
     options.ModelValidatorProviders.Clear();
 });
 
-// HTTP Client konfigurace
-builder.Services.AddHttpClient<Magenta>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-    client.DefaultRequestHeaders.Add("Accept", "application/json");
-})
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler()
-{
-    UseCookies = false,
-    MaxConnectionsPerServer = 10
-});
-
 // === TOKEN STORAGE KONFIGURACE ===
-// Registrace Token Storage na základì prostøedí
+// Registrace Token Storage PØED HTTP Client
 if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
 {
     // Pro development a testing používej in-memory storage
@@ -66,7 +53,19 @@ else
     builder.Services.AddSingleton<ITokenStorage, EncryptedFileTokenStorage>();
 }
 
-// Registrace Magenta service s token storage podporou
+// HTTP Client konfigurace
+builder.Services.AddHttpClient<Magenta>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler()
+{
+    UseCookies = false,
+    MaxConnectionsPerServer = 10
+});
+
+// Registrace Magenta service s ALL required dependencies
 builder.Services.AddScoped<Magenta>();
 
 // Aliasy pro dependency injection
@@ -167,11 +166,10 @@ builder.Services.AddHealthChecks()
     {
         try
         {
-            var serviceProvider = builder.Services.BuildServiceProvider();
-            var tokenStorage = serviceProvider.GetService<ITokenStorage>();
+            var app = builder.Services.BuildServiceProvider();
+            var tokenStorage = app.GetService<ITokenStorage>();
             if (tokenStorage != null)
             {
-                // Test if storage is accessible by trying to check for valid tokens
                 await tokenStorage.HasValidTokensAsync();
                 return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("Token storage accessible");
             }
@@ -279,7 +277,6 @@ if (app.Environment.IsDevelopment())
         {
             var tokens = await tokenStorage.LoadTokensAsync();
 
-            // Return safe debug info (bez actual tokenù)
             return Results.Ok(new
             {
                 hasTokens = tokens != null,
@@ -289,7 +286,10 @@ if (app.Environment.IsDevelopment())
                 createdAt = tokens?.CreatedAt,
                 expiresAt = tokens?.ExpiresAt,
                 timeToExpiry = tokens?.TimeToExpiry,
-                storageType = tokenStorage.GetType().Name
+                storageType = tokenStorage.GetType().Name,
+                tokenExpiresAt = tokens?.ExpiresAt,
+                isExpired = tokens?.IsExpired,
+                isNearExpiry = tokens?.IsNearExpiry
             });
         }
         catch (Exception ex)

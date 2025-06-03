@@ -338,4 +338,5 @@ public class MagentaController : ControllerBase
             return StatusCode(500, ApiResponse<string>.ErrorResult("Internal server error"));
         }
     }
+
 }

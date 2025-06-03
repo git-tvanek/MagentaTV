@@ -1,15 +1,12 @@
 ﻿using MagentaTV.Configuration;
 using MagentaTV.Models;
 using MagentaTV.Services.TokenStorage;
+using MagentaTV.Services;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
-using Polly;
-using Polly.Extensions.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Xml.Linq;
-
-namespace MagentaTV.Services;
 
 public class Magenta : IMagenta
 {
@@ -18,8 +15,11 @@ public class Magenta : IMagenta
     private readonly ILogger<Magenta> _logger;
     private readonly MagentaTVOptions _options;
     private readonly CacheOptions _cacheOptions;
+    private readonly TokenStorageOptions _tokenOptions;
+    private readonly ITokenStorage _tokenStorage;
     private readonly string _devId;
 
+    // Current session tokens
     private string? _accessToken;
     private string? _refreshToken;
     private DateTime _tokenExpiry = DateTime.MinValue;
@@ -30,42 +30,51 @@ public class Magenta : IMagenta
         ILogger<Magenta> logger,
         IOptions<MagentaTVOptions> options,
         IOptions<CacheOptions> cacheOptions,
-        ITokenStorage? tokenStorage = null)
+        IOptions<TokenStorageOptions> tokenOptions,
+        ITokenStorage tokenStorage)
     {
         _httpClient = httpClient;
         _cache = cache;
         _logger = logger;
         _options = options.Value;
         _cacheOptions = cacheOptions.Value;
+        _tokenOptions = tokenOptions.Value;
+        _tokenStorage = tokenStorage;
 
         _devId = GetOrCreateDeviceId();
         ConfigureHttpClient();
+
+        // Auto-load tokens on startup if enabled
+        if (_tokenOptions.AutoLoad)
+        {
+            _ = Task.Run(LoadStoredTokensAsync);
+        }
     }
 
-    private string GetOrCreateDeviceId()
+    private async Task LoadStoredTokensAsync()
     {
-        const string deviceIdFile = "dev_id.txt";
-
-        if (File.Exists(deviceIdFile))
+        try
         {
-            var deviceId = File.ReadAllText(deviceIdFile).Trim();
-            if (!string.IsNullOrEmpty(deviceId))
+            var tokens = await _tokenStorage.LoadTokensAsync();
+            if (tokens?.IsValid == true)
             {
-                _logger.LogInformation("Using existing device ID: {DeviceId}", deviceId);
-                return deviceId;
+                _accessToken = tokens.AccessToken;
+                _refreshToken = tokens.RefreshToken;
+                _tokenExpiry = tokens.ExpiresAt;
+
+                _logger.LogInformation("Loaded valid tokens for user: {Username}, expires: {ExpiresAt}",
+                    tokens.Username, tokens.ExpiresAt);
+            }
+            else if (tokens != null)
+            {
+                _logger.LogInformation("Loaded expired tokens for user: {Username}, expired: {ExpiresAt}",
+                    tokens.Username, tokens.ExpiresAt);
             }
         }
-
-        var newDeviceId = Guid.NewGuid().ToString();
-        File.WriteAllText(deviceIdFile, newDeviceId);
-        _logger.LogInformation("Created new device ID: {DeviceId}", newDeviceId);
-        return newDeviceId;
-    }
-
-    private void ConfigureHttpClient()
-    {
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(_options.UserAgent);
-        _httpClient.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load stored tokens on startup");
+        }
     }
 
     public async Task<bool> LoginAsync(string username, string password)
@@ -87,7 +96,23 @@ public class Magenta : IMagenta
             if (loginSuccess)
             {
                 _logger.LogInformation("Login successful for user: {Username}", username);
-                _tokenExpiry = DateTime.UtcNow.AddHours(1); // Token typically expires in 1 hour
+
+                // Save tokens to storage if auto-save is enabled
+                if (_tokenOptions.AutoSave && !string.IsNullOrEmpty(_accessToken))
+                {
+                    var tokenData = new TokenData
+                    {
+                        AccessToken = _accessToken,
+                        RefreshToken = _refreshToken ?? "",
+                        ExpiresAt = _tokenExpiry,
+                        Username = username,
+                        DeviceId = _devId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _tokenStorage.SaveTokensAsync(tokenData);
+                    _logger.LogDebug("Tokens saved to storage for user: {Username}", username);
+                }
             }
             else
             {
@@ -101,6 +126,21 @@ public class Magenta : IMagenta
             _logger.LogError(ex, "Login failed for user: {Username}", username);
             return false;
         }
+    }
+
+    public async Task LogoutAsync()
+    {
+        _logger.LogInformation("Logging out...");
+
+        // Clear tokens from memory
+        _accessToken = null;
+        _refreshToken = null;
+        _tokenExpiry = DateTime.MinValue;
+
+        // Clear tokens from storage
+        await _tokenStorage.ClearTokensAsync();
+
+        _logger.LogInformation("Logout completed");
     }
 
     private async Task<string?> InitializeSessionAsync()
@@ -152,10 +192,32 @@ public class Magenta : IMagenta
         {
             _accessToken = json.RootElement.GetProperty("token").GetProperty("accessToken").GetString();
             _refreshToken = json.RootElement.GetProperty("token").GetProperty("refreshToken").GetString();
+            _tokenExpiry = DateTime.UtcNow.AddHours(_tokenOptions.TokenExpirationHours);
             return true;
         }
 
         return false;
+    }
+
+    private async Task EnsureAuthenticatedAsync()
+    {
+        // Check if current tokens are valid
+        if (!string.IsNullOrEmpty(_accessToken) && DateTime.UtcNow < _tokenExpiry)
+            return;
+
+        // Try to load from storage
+        var tokens = await _tokenStorage.LoadTokensAsync();
+        if (tokens?.IsValid == true)
+        {
+            _accessToken = tokens.AccessToken;
+            _refreshToken = tokens.RefreshToken;
+            _tokenExpiry = tokens.ExpiresAt;
+            _logger.LogDebug("Loaded valid tokens from storage for user: {Username}", tokens.Username);
+            return;
+        }
+
+        // If storage doesn't have valid tokens either
+        throw new UnauthorizedAccessException("Authentication required. Please login first.");
     }
 
     public async Task<List<ChannelDto>> GetChannelsAsync()
@@ -456,44 +518,29 @@ public class Magenta : IMagenta
         return doc.Declaration + doc.ToString();
     }
 
-    private async Task EnsureAuthenticatedAsync()
+    private string GetOrCreateDeviceId()
     {
-        if (string.IsNullOrEmpty(_accessToken) || DateTime.UtcNow >= _tokenExpiry)
+        const string deviceIdFile = "dev_id.txt";
+
+        if (File.Exists(deviceIdFile))
         {
-            throw new UnauthorizedAccessException("Authentication required. Please login first.");
-        }
-    }
-
-    private async Task RefreshTokenAsync()
-    {
-        if (string.IsNullOrEmpty(_refreshToken))
-        {
-            throw new UnauthorizedAccessException("Refresh token not available. Please login again.");
-        }
-
-        try
-        {
-            var request = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/{_options.ApiVersion}/auth/refresh");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _refreshToken);
-
-            var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-
-            var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-
-            if (json.RootElement.TryGetProperty("token", out var token))
+            var deviceId = File.ReadAllText(deviceIdFile).Trim();
+            if (!string.IsNullOrEmpty(deviceId))
             {
-                _accessToken = token.GetProperty("accessToken").GetString();
-                _refreshToken = token.GetProperty("refreshToken").GetString();
-                _tokenExpiry = DateTime.UtcNow.AddHours(1);
-
-                _logger.LogInformation("Token refreshed successfully");
+                _logger.LogInformation("Using existing device ID: {DeviceId}", deviceId);
+                return deviceId;
             }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to refresh token");
-            throw new UnauthorizedAccessException("Failed to refresh authentication token. Please login again.");
-        }
+
+        var newDeviceId = Guid.NewGuid().ToString();
+        File.WriteAllText(deviceIdFile, newDeviceId);
+        _logger.LogInformation("Created new device ID: {DeviceId}", newDeviceId);
+        return newDeviceId;
+    }
+
+    private void ConfigureHttpClient()
+    {
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(_options.UserAgent);
+        _httpClient.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
     }
 }
