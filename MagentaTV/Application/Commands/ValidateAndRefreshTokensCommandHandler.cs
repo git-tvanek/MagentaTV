@@ -1,5 +1,6 @@
 ﻿using MagentaTV.Services.Session;
 using MagentaTV.Services.TokenStorage;
+using MagentaTV.Services;
 using MediatR;
 
 namespace MagentaTV.Application.Commands
@@ -8,15 +9,18 @@ namespace MagentaTV.Application.Commands
     {
         private readonly ITokenStorage _tokenStorage;
         private readonly ISessionManager _sessionManager;
+        private readonly IMagenta _magentaService;
         private readonly ILogger<ValidateAndRefreshTokensCommandHandler> _logger;
 
         public ValidateAndRefreshTokensCommandHandler(
             ITokenStorage tokenStorage,
             ISessionManager sessionManager,
+            IMagenta magentaService,
             ILogger<ValidateAndRefreshTokensCommandHandler> logger)
         {
             _tokenStorage = tokenStorage;
             _sessionManager = sessionManager;
+            _magentaService = magentaService;
             _logger = logger;
         }
 
@@ -33,8 +37,14 @@ namespace MagentaTV.Application.Commands
                 {
                     try
                     {
-                        // TODO: Implementovat refresh token functionality v Magenta service
                         _logger.LogDebug("Attempting token refresh for user {Username}", request.Session.Username);
+                        var refreshed = await _magentaService.RefreshTokensAsync(tokens);
+                        if (refreshed != null)
+                        {
+                            await _tokenStorage.SaveTokensAsync(refreshed);
+                            tokens = refreshed;
+                            _logger.LogInformation("Token refresh succeeded for user {Username}", request.Session.Username);
+                        }
                     }
                     catch (Exception ex)
                     {

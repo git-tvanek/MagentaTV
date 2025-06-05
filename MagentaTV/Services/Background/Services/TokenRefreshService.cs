@@ -64,9 +64,16 @@ namespace MagentaTV.Services.Background.Services
 
         private async Task<TokenData?> RefreshTokensAsync(IMagenta service, TokenData currentTokens)
         {
-            // Implementace refresh logiky
-            // TODO: Přidat refresh endpoint do Magenta service
-            return null;
+            try
+            {
+                var refreshed = await service.RefreshTokensAsync(currentTokens);
+                return refreshed;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Token refresh request failed");
+                return null;
+            }
         }
     }
 }

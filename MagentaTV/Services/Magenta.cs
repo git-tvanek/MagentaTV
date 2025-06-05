@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text;
 using System.Xml.Linq;
 
 public class Magenta : IMagenta
@@ -516,6 +517,46 @@ public class Magenta : IMagenta
 
         _logger.LogInformation("Generated XMLTV for channel {ChannelId} with {EpgCount} programs", channelId, epg.Count);
         return doc.Declaration + doc.ToString();
+    }
+
+    public async Task<TokenData?> RefreshTokensAsync(TokenData currentTokens)
+    {
+        if (string.IsNullOrEmpty(currentTokens.RefreshToken))
+            return null;
+
+        var body = new { refreshToken = currentTokens.RefreshToken };
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl}/{_options.ApiVersion}/auth/refresh")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", currentTokens.RefreshToken);
+
+        var response = await _httpClient.SendAsync(request);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Token refresh failed with status {Status}", response.StatusCode);
+            return null;
+        }
+
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        if (json.RootElement.TryGetProperty("token", out var token))
+        {
+            _accessToken = token.GetProperty("accessToken").GetString();
+            _refreshToken = token.GetProperty("refreshToken").GetString();
+            _tokenExpiry = DateTime.UtcNow.AddHours(_tokenOptions.TokenExpirationHours);
+
+            return new TokenData
+            {
+                AccessToken = _accessToken ?? string.Empty,
+                RefreshToken = _refreshToken ?? string.Empty,
+                ExpiresAt = _tokenExpiry,
+                Username = currentTokens.Username,
+                DeviceId = _devId,
+                CreatedAt = DateTime.UtcNow
+            };
+        }
+
+        return null;
     }
 
     private string GetOrCreateDeviceId()
