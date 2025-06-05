@@ -18,6 +18,7 @@ namespace MagentaTV.Extensions
             // Register core services
             services.AddSingleton<IEventBus, EventBus>();
             services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
+            services.AddSingleton<IBackgroundServiceManager, BackgroundServiceManager>();
 
             // Register event handlers
             services.AddSingleton<BackgroundEventHandlers>();
