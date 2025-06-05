@@ -15,11 +15,16 @@ using MagentaTV.Services.Background;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Background Services
+
 builder.Services.AddBackgroundServices(builder.Configuration);
+
 builder.Services.AddBackgroundService<TokenRefreshService>();
 builder.Services.AddBackgroundService<SessionCleanupService>();
-builder.Services.AddBackgroundService<CacheWarmingService>();
+builder.Services.AddBackgroundService<CacheWarmingService>(); 
+
+
+builder.Services.AddSingleton<ICacheWarmingService>(provider =>
+    provider.GetRequiredService<CacheWarmingService>());
 
 // MediatR Event Handlers
 builder.Services.AddTransient<INotificationHandler<UserLoggedInEvent>, UserLoggedInEventHandler>();
@@ -35,7 +40,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "MagentaTV API",
         Version = "v1",
-        Description = "API wrapper pro MagentaTV služby s session managementem"
+        Description = "API wrapper pro MagentaTV služby s intelligent session managementem" // ✅ UPDATED description
     });
 });
 
@@ -89,7 +94,7 @@ if (builder.Environment.IsDevelopment())
 }
 else
 {
-    // Pro produkci mùžete pozdìji implementovat DatabaseSessionManager nebo RedisSessionManager
+    // Pro produkci můžete později implementovat DatabaseSessionManager nebo RedisSessionManager
     builder.Services.AddSingleton<ISessionManager, InMemorySessionManager>();
 }
 
@@ -130,10 +135,11 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-// Health Checks
+// ✅ FIXED: Enhanced Health Checks with BackgroundServicesHealthCheck
 builder.Services.AddHealthChecks()
     .AddCheck<SessionHealthCheck>("session-manager")
-    .AddCheck<MagentaTVHealthCheck>("magentatv-api");
+    .AddCheck<MagentaTVHealthCheck>("magentatv-api")
+    .AddCheck<BackgroundServicesHealthCheck>("background-services"); // ✅ ADDED: Missing health check
 
 // Logging
 builder.Logging.ClearProviders();
@@ -198,22 +204,52 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
                 name = x.Key,
                 status = x.Value.Status.ToString(),
                 exception = x.Value.Exception?.Message,
-                duration = x.Value.Duration.ToString()
+                duration = x.Value.Duration.ToString(),
+                description = x.Value.Description 
             }),
-            duration = report.TotalDuration.ToString()
+            duration = report.TotalDuration.ToString(),
+            timestamp = DateTime.UtcNow 
         };
-        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response));
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true 
+        }));
     }
 });
 
-var serviceManager = app.Services.GetRequiredService<IBackgroundServiceManager>();
-await serviceManager.StartServiceAsync<TokenRefreshService>();
-await serviceManager.StartServiceAsync<SessionCleanupService>();
-await serviceManager.StartServiceAsync<CacheWarmingService>();
+try
+{
+    var serviceManager = app.Services.GetRequiredService<IBackgroundServiceManager>();
+    await serviceManager.StartAllServicesIntelligentlyAsync(); // 
+
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("All background services started intelligently");
+}
+catch (Exception ex)
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(ex, "Failed to start background services intelligently, falling back to basic startup");
+
+ 
+    try
+    {
+        var serviceManager = app.Services.GetRequiredService<IBackgroundServiceManager>();
+        await serviceManager.StartCoreServicesAsync(); 
+        await serviceManager.StartServiceAsync<CacheWarmingService>(); // Start cache warming in fallback mode
+
+        logger.LogWarning("Background services started in fallback mode");
+    }
+    catch (Exception fallbackEx)
+    {
+        logger.LogCritical(fallbackEx, "Failed to start background services even in fallback mode");
+        // Don't throw - let the app start without background services
+    }
+}
 
 app.Run();
 
-// Configuration validators
+#region Configuration Validators
+
 public class ValidateSessionOptions : IValidateOptions<MagentaTV.Configuration.SessionOptions>
 {
     public ValidateOptionsResult Validate(string? name, MagentaTV.Configuration.SessionOptions options)
@@ -246,7 +282,10 @@ public class ValidateTokenStorageOptions : IValidateOptions<TokenStorageOptions>
     }
 }
 
-// Health Checks
+#endregion
+
+#region Health Checks
+
 public class SessionHealthCheck : IHealthCheck
 {
     private readonly ISessionManager _sessionManager;
@@ -270,7 +309,9 @@ public class SessionHealthCheck : IHealthCheck
             {
                 ["ActiveSessions"] = stats.TotalActiveSessions,
                 ["UniqueUsers"] = stats.UniqueUsers,
-                ["LastCleanup"] = stats.LastCleanup
+                ["LastCleanup"] = stats.LastCleanup,
+                ["ExpiredSessions"] = stats.TotalExpiredSessions, // ✅ ADDED: More stats
+                ["InactiveSessions"] = stats.TotalInactiveSessions // ✅ ADDED: More stats
             };
 
             return HealthCheckResult.Healthy("Session manager is healthy", data);
@@ -300,25 +341,103 @@ public class MagentaTVHealthCheck : IHealthCheck
     {
         try
         {
-
             var channels = await _magentaService.GetChannelsAsync();
 
             var data = new Dictionary<string, object>
             {
                 ["ChannelCount"] = channels.Count,
-                ["LastCheck"] = DateTime.UtcNow
+                ["LastCheck"] = DateTime.UtcNow,
+                ["HasChannels"] = channels.Count > 0 
             };
 
             return HealthCheckResult.Healthy("MagentaTV API is healthy", data);
         }
         catch (UnauthorizedAccessException)
         {
-            return HealthCheckResult.Degraded("MagentaTV API requires authentication");
+          
+            var data = new Dictionary<string, object>
+            {
+                ["LastCheck"] = DateTime.UtcNow,
+                ["RequiresAuth"] = true
+            };
+
+            return HealthCheckResult.Degraded("MagentaTV API requires authentication", null, data);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "MagentaTV health check failed");
-            return HealthCheckResult.Unhealthy("MagentaTV API is unhealthy", ex);
+
+            var data = new Dictionary<string, object>
+            {
+                ["LastCheck"] = DateTime.UtcNow,
+                ["ErrorType"] = ex.GetType().Name
+            };
+
+            return HealthCheckResult.Unhealthy("MagentaTV API is unhealthy", ex, data);
         }
     }
 }
+
+
+public class BackgroundServicesHealthCheck : IHealthCheck
+{
+    private readonly IBackgroundServiceManager _backgroundManager;
+    private readonly ILogger<BackgroundServicesHealthCheck> _logger;
+
+    public BackgroundServicesHealthCheck(
+        IBackgroundServiceManager backgroundManager,
+        ILogger<BackgroundServicesHealthCheck> logger)
+    {
+        _backgroundManager = backgroundManager;
+        _logger = logger;
+    }
+
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var stats = await _backgroundManager.GetStatsAsync();
+            var services = await _backgroundManager.GetAllServicesInfoAsync();
+
+            var failedServices = services.Where(s => s.Status == MagentaTV.Models.Background.BackgroundServiceStatus.Failed).ToList();
+            var runningServices = services.Where(s => s.Status == MagentaTV.Models.Background.BackgroundServiceStatus.Running).ToList();
+
+            var data = new Dictionary<string, object>
+            {
+                ["TotalServices"] = stats.TotalServices,
+                ["RunningServices"] = stats.RunningServices,
+                ["FailedServices"] = failedServices.Count,
+                ["QueuedItems"] = stats.QueuedItems,
+                ["QueueCapacity"] = stats.QueueCapacity,
+                ["QueueUtilization"] = stats.QueuedItems / (double)stats.QueueCapacity * 100, 
+                ["FailedServiceNames"] = failedServices.Select(s => s.Name).ToArray(),
+                ["RunningServiceNames"] = runningServices.Select(s => s.Name).ToArray(),
+                ["LastUpdated"] = stats.LastUpdated
+            };
+
+            if (failedServices.Any())
+            {
+                return HealthCheckResult.Degraded(
+                    $"Some background services failed: {string.Join(", ", failedServices.Select(s => s.Name))}",
+                    null,
+                    data);
+            }
+
+            if (stats.RunningServices == 0)
+            {
+                return HealthCheckResult.Unhealthy("No background services are running", null, data);
+            }
+
+            return HealthCheckResult.Healthy("All background services are healthy", data);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Background services health check failed");
+            return HealthCheckResult.Unhealthy("Background services health check failed", ex);
+        }
+    }
+}
+
+#endregion

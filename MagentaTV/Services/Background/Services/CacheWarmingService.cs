@@ -1,11 +1,15 @@
 ﻿using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background.Events;
+using MagentaTV.Services.TokenStorage;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace MagentaTV.Services.Background.Services
 {
-    public class CacheWarmingService : BaseBackgroundService
+    public class CacheWarmingService : BaseBackgroundService, ICacheWarmingService
     {
+        private bool _hasWarmedAfterLogin = false;
+        private DateTime _lastSuccessfulWarm = DateTime.MinValue;
+
         public CacheWarmingService(
             ILogger<CacheWarmingService> logger,
             IServiceProvider serviceProvider,
@@ -16,34 +20,162 @@ namespace MagentaTV.Services.Background.Services
 
         protected override async Task ExecuteServiceAsync(CancellationToken stoppingToken)
         {
+            Logger.LogInformation("CacheWarmingService started with intelligent token checking");
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 await ExecuteWithEventsAsync("CacheWarming", async () =>
                 {
                     using var scope = CreateScope();
                     var magentaService = scope.ServiceProvider.GetRequiredService<IMagenta>();
+                    var tokenStorage = scope.ServiceProvider.GetRequiredService<ITokenStorage>();
                     var cache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
 
-                    // Pre-load kanály do cache
+                    // Zkontroluj dostupnost tokenů
+                    var hasValidTokens = await tokenStorage.HasValidTokensAsync();
+                    if (!hasValidTokens)
+                    {
+                        Logger.LogDebug("Skipping cache warming - no valid tokens available");
+                        SetMetric("skipped_no_tokens", GetMetric<long>("skipped_no_tokens") + 1);
+                        SetMetric("last_check_result", "no_tokens");
+                        return true; // Není chyba, jen počkáme na přihlášení
+                    }
+
+                    // Zkontroluj jestli už není cache naplněná
+                    if (IsCacheAlreadyWarmed(cache))
+                    {
+                        Logger.LogDebug("Cache already warmed, skipping automatic warming");
+                        SetMetric("skipped_already_warmed", GetMetric<long>("skipped_already_warmed") + 1);
+                        SetMetric("last_check_result", "already_warmed");
+                        return true;
+                    }
+
                     try
                     {
                         var channels = await magentaService.GetChannelsAsync();
-                        Logger.LogInformation("Warmed cache with {ChannelCount} channels", channels.Count);
+                        Logger.LogInformation("Cache warmed with {ChannelCount} channels", channels.Count);
 
+                        // Update metrics
                         SetMetric("warmed_channels", channels.Count);
+                        SetMetric("last_warm_time", DateTime.UtcNow);
+                        SetMetric("successful_warms", GetMetric<long>("successful_warms") + 1);
+                        SetMetric("last_check_result", "success");
+
+                        _lastSuccessfulWarm = DateTime.UtcNow;
+
+                        // Pokud tohle je první úspěšné warming po spuštění, označíme to
+                        if (!_hasWarmedAfterLogin)
+                        {
+                            _hasWarmedAfterLogin = true;
+                            Logger.LogInformation("Initial cache warming completed successfully");
+                        }
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        Logger.LogDebug("Cache warming skipped - authentication expired during operation");
+                        SetMetric("failed_auth", GetMetric<long>("failed_auth") + 1);
+                        SetMetric("last_check_result", "auth_failed");
+                        // Nejde o fatální chybu, tokeny mohly expirovat během operace
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        Logger.LogWarning(ex, "Cache warming failed due to network issues");
+                        SetMetric("failed_network", GetMetric<long>("failed_network") + 1);
+                        SetMetric("last_check_result", "network_failed");
                     }
                     catch (Exception ex)
                     {
                         Logger.LogWarning(ex, "Failed to warm channel cache");
+                        SetMetric("failed_other", GetMetric<long>("failed_other") + 1);
+                        SetMetric("last_check_result", "other_failed");
                     }
 
                     return true;
                 });
 
-                // Warm cache každé 4 hodiny
-                await Task.Delay(TimeSpan.FromHours(4), stoppingToken);
+                // Dynamický interval na základě úspěchu
+                var delayHours = GetDynamicInterval();
+                Logger.LogDebug("Next cache warming in {Hours} hours", delayHours);
+
+                await Task.Delay(TimeSpan.FromHours(delayHours), stoppingToken);
                 UpdateHeartbeat();
             }
+        }
+
+        public bool HasWarmedSuccessfully => _hasWarmedAfterLogin;
+        public DateTime? LastSuccessfulWarm => _lastSuccessfulWarm == DateTime.MinValue ? null : _lastSuccessfulWarm;
+
+
+        /// <summary>
+        /// Manuální trigger pro cache warming (voláno z event handlerů)
+        /// </summary>
+        public async Task TriggerWarmingAsync()
+        {
+            try
+            {
+                Logger.LogInformation("Manual cache warming triggered");
+
+                using var scope = CreateScope();
+                var magentaService = scope.ServiceProvider.GetRequiredService<IMagenta>();
+
+                var channels = await magentaService.GetChannelsAsync();
+                Logger.LogInformation("Manual cache warming completed with {ChannelCount} channels", channels.Count);
+
+                SetMetric("manual_warms", GetMetric<long>("manual_warms") + 1);
+                _hasWarmedAfterLogin = true;
+                _lastSuccessfulWarm = DateTime.UtcNow;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Manual cache warming failed");
+                SetMetric("manual_warm_failures", GetMetric<long>("manual_warm_failures") + 1);
+            }
+        }
+
+        /// <summary>
+        /// Zkontroluje jestli je cache už naplněná
+        /// </summary>
+        private bool IsCacheAlreadyWarmed(IMemoryCache cache)
+        {
+            // Zkontrolujeme jestli jsou v cache kanály
+            return cache.TryGetValue("channels", out _);
+        }
+
+        /// <summary>
+        /// Dynamický interval na základě úspěchu posledního warming
+        /// </summary>
+        private double GetDynamicInterval()
+        {
+            // Pokud se warming nikdy nepovedl, zkusíme častěji
+            if (_lastSuccessfulWarm == DateTime.MinValue)
+            {
+                return 0.5; // 30 minut
+            }
+
+            // Pokud byl poslední warming úspěšný a nedávno, můžeme čekat déle
+            var timeSinceLastWarm = DateTime.UtcNow - _lastSuccessfulWarm;
+            if (timeSinceLastWarm < TimeSpan.FromHours(2))
+            {
+                return 4; // 4 hodiny
+            }
+
+            // Standardní interval
+            return 2; // 2 hodiny
+        }
+
+        /// <summary>
+        /// Přidává informace do health check
+        /// </summary>
+        public override Task<ServiceHealth> GetHealthAsync()
+        {
+            var baseHealth = base.GetHealthAsync().Result;
+
+            // Přidáme cache warming specific metriky
+            baseHealth.Metrics["has_warmed_after_login"] = _hasWarmedAfterLogin;
+            baseHealth.Metrics["last_successful_warm"] = _lastSuccessfulWarm;
+            baseHealth.Metrics["time_since_last_warm"] = DateTime.UtcNow - _lastSuccessfulWarm;
+
+            return Task.FromResult(baseHealth);
         }
     }
 }
