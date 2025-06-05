@@ -1,5 +1,6 @@
 ﻿using MagentaTV.Configuration;
 using MagentaTV.Services.Background;
+using MagentaTV.Services.Background.Events;
 
 namespace MagentaTV.Extensions
 {
@@ -13,12 +14,28 @@ namespace MagentaTV.Extensions
             services.Configure<BackgroundServiceOptions>(
                 configuration.GetSection(BackgroundServiceOptions.SectionName));
 
-            // Register core background services
+            // Register core services
+            services.AddSingleton<IEventBus, EventBus>();
             services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
-            services.AddSingleton<IBackgroundServiceManager, BackgroundServiceManager>();
+
+            // Register event handlers
+            services.AddSingleton<BackgroundEventHandlers>();
 
             // Register the queued background service
             services.AddHostedService<QueuedBackgroundService>();
+
+            // Subscribe event handlers
+            services.AddSingleton<IHostedService>(provider =>
+            {
+                var eventBus = provider.GetRequiredService<IEventBus>();
+                var handlers = provider.GetRequiredService<BackgroundEventHandlers>();
+
+                eventBus.Subscribe<WorkItemStartedEvent>(handlers);
+                eventBus.Subscribe<WorkItemCompletedEvent>(handlers);
+                eventBus.Subscribe<ServiceHealthChangedEvent>(handlers);
+
+                return new EmptyHostedService(); // Just for registration
+            });
 
             return services;
         }
@@ -32,9 +49,7 @@ namespace MagentaTV.Extensions
             return services;
         }
 
-        /// <summary>
-        /// Helper pro vytvoření background work item
-        /// </summary>
+        // Helper methods for creating work items
         public static BackgroundWorkItem CreateWorkItem(
             string name,
             string type,
@@ -52,9 +67,6 @@ namespace MagentaTV.Extensions
             };
         }
 
-        /// <summary>
-        /// Helper pro scheduled work item
-        /// </summary>
         public static BackgroundWorkItem CreateScheduledWorkItem(
             string name,
             string type,
@@ -72,6 +84,12 @@ namespace MagentaTV.Extensions
                 Priority = priority,
                 Parameters = parameters ?? new Dictionary<string, object>()
             };
+        }
+
+        private class EmptyHostedService : IHostedService
+        {
+            public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+            public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         }
     }
 }

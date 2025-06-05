@@ -1,12 +1,9 @@
-﻿using MagentaTV.Configuration;
-using MagentaTV.Models.Background;
-using Microsoft.Extensions.Options;
+﻿using MagentaTV.Models.Background;
+using MagentaTV.Services.Background.Events;
+using System.Diagnostics;
 
-namespace MagentaTV.Services.Background
+namespace MagentaTV.Services.Background.Services
 {
-    /// <summary>
-    /// Background service pro zpracování úloh z fronty
-    /// </summary>
     public class QueuedBackgroundService : BaseBackgroundService
     {
         private readonly IBackgroundTaskQueue _taskQueue;
@@ -15,8 +12,8 @@ namespace MagentaTV.Services.Background
             IBackgroundTaskQueue taskQueue,
             ILogger<QueuedBackgroundService> logger,
             IServiceProvider serviceProvider,
-            IOptions<BackgroundServiceOptions> options)
-            : base(logger, serviceProvider, options, "QueuedBackgroundService")
+            IEventBus eventBus)
+            : base(logger, serviceProvider, eventBus, "QueuedBackgroundService")
         {
             _taskQueue = taskQueue;
         }
@@ -33,7 +30,7 @@ namespace MagentaTV.Services.Background
 
                     if (workItem == null)
                     {
-                        await WaitForIntervalAsync(TimeSpan.FromMilliseconds(100), stoppingToken);
+                        await Task.Delay(100, stoppingToken);
                         continue;
                     }
 
@@ -47,99 +44,71 @@ namespace MagentaTV.Services.Background
                 catch (Exception ex)
                 {
                     Logger.LogError(ex, "Error processing background work items");
-
-                    if (!Options.ContinueOnError)
-                    {
-                        throw;
-                    }
+                    SetMetric("processing_errors", GetMetric<long>("processing_errors") + 1);
                 }
             }
         }
 
         private async Task ProcessWorkItemAsync(BackgroundWorkItem workItem, CancellationToken stoppingToken)
         {
-            workItem.Status = BackgroundWorkItemStatus.Running;
+            workItem.Status = WorkItemStatus.Running;
             workItem.StartedAt = DateTime.UtcNow;
 
-            Logger.LogInformation("Processing background work item {Id} ({Name})", workItem.Id, workItem.Name);
+            // Publish start event
+            await EventBus.PublishAsync(new WorkItemStartedEvent
+            {
+                WorkItemId = workItem.Id,
+                WorkItemName = workItem.Name,
+                WorkItemType = workItem.Type,
+                StartedAt = workItem.StartedAt.Value
+            });
+
+            Logger.LogInformation("Processing work item {Id} ({Name})", workItem.Id, workItem.Name);
+
+            var stopwatch = Stopwatch.StartNew();
+            bool success = false;
+            string? errorMessage = null;
 
             try
             {
                 using var scope = CreateScope();
                 await workItem.WorkItem(scope.ServiceProvider, stoppingToken);
 
-                workItem.Status = BackgroundWorkItemStatus.Completed;
-                workItem.CompletedAt = DateTime.UtcNow;
+                workItem.Status = WorkItemStatus.Completed;
+                success = true;
 
-                Logger.LogInformation("Completed background work item {Id} ({Name}) in {Duration}ms",
-                    workItem.Id, workItem.Name,
-                    (workItem.CompletedAt - workItem.StartedAt)?.TotalMilliseconds);
+                Logger.LogInformation("Completed work item {Id} ({Name}) in {Duration}ms",
+                    workItem.Id, workItem.Name, stopwatch.ElapsedMilliseconds);
 
-                // OPRAVA: Správné přetypování object na long
-                var processedItems = GetMetricValue<long>("processed_items", 0L);
-                RecordMetric("processed_items", processedItems + 1L);
+                SetMetric("processed_items", GetMetric<long>("processed_items") + 1);
+                SetMetric($"processed_{workItem.Type}", GetMetric<long>($"processed_{workItem.Type}") + 1);
             }
             catch (Exception ex)
             {
+                workItem.Status = WorkItemStatus.Failed;
                 workItem.Exceptions.Add(ex);
-                workItem.ErrorMessage = ex.Message;
-                workItem.RetryCount++;
+                errorMessage = ex.Message;
 
-                Logger.LogWarning(ex, "Background work item {Id} ({Name}) failed on attempt {Attempt}",
-                    workItem.Id, workItem.Name, workItem.RetryCount);
+                Logger.LogError(ex, "Work item {Id} ({Name}) failed", workItem.Id, workItem.Name);
 
-                if (workItem.RetryCount < workItem.MaxRetries)
-                {
-                    workItem.Status = BackgroundWorkItemStatus.Retrying;
-                    workItem.ScheduledFor = DateTime.UtcNow.Add(workItem.RetryDelay);
-
-                    Logger.LogInformation("Retrying background work item {Id} in {Delay}",
-                        workItem.Id, workItem.RetryDelay);
-
-                    // Přidáme zpět do fronty pro retry
-                    await _taskQueue.QueueBackgroundWorkItemAsync(workItem);
-                }
-                else
-                {
-                    workItem.Status = BackgroundWorkItemStatus.Failed;
-                    workItem.CompletedAt = DateTime.UtcNow;
-
-                    Logger.LogError(ex, "Background work item {Id} ({Name}) failed after {MaxRetries} attempts",
-                        workItem.Id, workItem.Name, workItem.MaxRetries);
-
-                    // OPRAVA: Správné přetypování object na long
-                    var failedItems = GetMetricValue<long>("failed_items", 0L);
-                    RecordMetric("failed_items", failedItems + 1L);
-                }
+                SetMetric("failed_items", GetMetric<long>("failed_items") + 1);
+                SetMetric($"failed_{workItem.Type}", GetMetric<long>($"failed_{workItem.Type}") + 1);
             }
-        }
-
-        /// <summary>
-        /// Helper metoda pro bezpečné získání metriky s typovou kontrolou
-        /// </summary>
-        private T GetMetricValue<T>(string metricName, T defaultValue)
-        {
-            var metrics = GetMetrics();
-            if (metrics.TryGetValue(metricName, out var value))
+            finally
             {
-                try
-                {
-                    if (value is T typedValue)
-                    {
-                        return typedValue;
-                    }
+                stopwatch.Stop();
+                workItem.CompletedAt = DateTime.UtcNow;
 
-                    // Pokus o konverzi
-                    return (T)Convert.ChangeType(value, typeof(T));
-                }
-                catch (Exception ex)
+                // Publish completion event
+                await EventBus.PublishAsync(new WorkItemCompletedEvent
                 {
-                    Logger.LogWarning(ex, "Failed to convert metric {MetricName} value {Value} to type {Type}, using default {Default}",
-                        metricName, value, typeof(T).Name, defaultValue);
-                }
+                    WorkItemId = workItem.Id,
+                    WorkItemName = workItem.Name,
+                    Success = success,
+                    Duration = stopwatch.Elapsed,
+                    ErrorMessage = errorMessage
+                });
             }
-
-            return defaultValue;
         }
     }
 }
