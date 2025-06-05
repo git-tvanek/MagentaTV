@@ -5,6 +5,7 @@ using MagentaTV.Services.Session;
 using MagentaTV.Services.TokenStorage;
 using MagentaTV.Extensions;
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 
 namespace MagentaTV.Controllers;
 
@@ -16,17 +17,20 @@ public class MagentaController : ControllerBase
     private readonly ITokenStorage _tokenStorage;
     private readonly ISessionManager _sessionManager;
     private readonly ILogger<MagentaController> _logger;
+    private readonly IMediator _mediator;
 
     public MagentaController(
         IMagenta service,
         ITokenStorage tokenStorage,
         ISessionManager sessionManager,
-        ILogger<MagentaController> logger)
+        ILogger<MagentaController> logger,
+        IMediator mediator)
     {
         _service = service;
         _tokenStorage = tokenStorage;
         _sessionManager = sessionManager;
         _logger = logger;
+        _mediator = mediator;
     }
 
     /// <summary>

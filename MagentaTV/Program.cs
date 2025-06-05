@@ -7,8 +7,25 @@ using MagentaTV.Middleware;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Threading.RateLimiting;
+using MagentaTV.Application.EventHandlers;
+using MagentaTV.Application.Events;
+using MagentaTV.Extensions;
+using MagentaTV.Services.Background.Services;
+using MediatR;
+using MagentaTV.Services.Background;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Background Services
+builder.Services.AddBackgroundServices(builder.Configuration);
+builder.Services.AddBackgroundService<TokenRefreshService>();
+builder.Services.AddBackgroundService<SessionCleanupService>();
+builder.Services.AddBackgroundService<CacheWarmingService>();
+
+// MediatR Event Handlers
+builder.Services.AddTransient<INotificationHandler<UserLoggedInEvent>, UserLoggedInEventHandler>();
+builder.Services.AddTransient<INotificationHandler<TokensRefreshedEvent>, TokensRefreshedEventHandler>();
+builder.Services.AddTransient<INotificationHandler<UserLoggedOutEvent>, UserLoggedOutEventHandler>();
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -183,6 +200,11 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
         await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response));
     }
 });
+
+var serviceManager = app.Services.GetRequiredService<IBackgroundServiceManager>();
+await serviceManager.StartServiceAsync<TokenRefreshService>();
+await serviceManager.StartServiceAsync<SessionCleanupService>();
+await serviceManager.StartServiceAsync<CacheWarmingService>();
 
 app.Run();
 
