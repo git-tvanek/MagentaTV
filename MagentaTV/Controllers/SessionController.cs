@@ -1,6 +1,9 @@
-﻿using MagentaTV.Models;
+﻿using MagentaTV.Application.Commands;
+using MagentaTV.Application.Queries;
+using MagentaTV.Models;
 using MagentaTV.Models.Session;
 using MagentaTV.Services.Session;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MagentaTV.Controllers;
@@ -9,12 +12,12 @@ namespace MagentaTV.Controllers;
 [Route("sessions")]
 public class SessionController : ControllerBase
 {
-    private readonly ISessionManager _sessionManager;
+    private readonly IMediator _mediator;
     private readonly ILogger<SessionController> _logger;
 
-    public SessionController(ISessionManager sessionManager, ILogger<SessionController> logger)
+    public SessionController(IMediator mediator, ILogger<SessionController> logger)
     {
-        _sessionManager = sessionManager;
+        _mediator = mediator;
         _logger = logger;
     }
 
@@ -36,41 +39,25 @@ public class SessionController : ControllerBase
             return BadRequest(ApiResponse<string>.ErrorResult("Validation failed", errors));
         }
 
-        try
+        var command = new CreateSessionCommand
         {
-            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            var userAgent = HttpContext.Request.Headers.UserAgent.ToString();
+            Request = request,
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            UserAgent = HttpContext.Request.Headers.UserAgent.ToString()
+        };
 
-            var sessionId = await _sessionManager.CreateSessionAsync(request, ipAddress, userAgent);
+        var result = await _mediator.Send(command);
 
+        if (result.Success)
+        {
             // Nastavíme session cookie
-            SetSessionCookie(sessionId);
-
-            var response = new SessionCreatedDto
-            {
-                SessionId = sessionId,
-                Message = "Session created successfully",
-                ExpiresAt = DateTime.UtcNow.AddHours(
-                    request.RememberMe ? 720 : request.SessionDurationHours ?? 8)
-            };
-
-            _logger.LogInformation("Session created successfully for user {Username}: {SessionId}",
-                request.Username, sessionId);
-
-            return Ok(ApiResponse<SessionCreatedDto>.SuccessResult(response, "Přihlášení proběhlo úspěšně"));
+            SetSessionCookie(result.Data!.SessionId);
+            return Ok(result);
         }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.LogWarning("Session creation failed - unauthorized: {Message}", ex.Message);
-            return Unauthorized(ApiResponse<string>.ErrorResult("Invalid credentials",
-                new List<string> { "Neplatné přihlašovací údaje" }));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to create session for user {Username}", request.Username);
-            return StatusCode(500, ApiResponse<string>.ErrorResult("Internal server error",
-                new List<string> { "Došlo k chybě při vytváření session" }));
-        }
+
+        return result.Message?.Contains("Invalid credentials") == true
+            ? Unauthorized(result)
+            : StatusCode(500, result);
     }
 
     /// <summary>
@@ -87,27 +74,16 @@ public class SessionController : ControllerBase
             return Unauthorized(ApiResponse<string>.ErrorResult("No active session"));
         }
 
-        try
-        {
-            var sessionInfo = await _sessionManager.GetSessionInfoAsync(sessionId);
-            if (sessionInfo == null)
-            {
-                RemoveSessionCookie();
-                return Unauthorized(ApiResponse<string>.ErrorResult("Session not found"));
-            }
+        var query = new GetCurrentSessionQuery { SessionId = sessionId };
+        var result = await _mediator.Send(query);
 
-            if (!sessionInfo.IsExpired)
-            {
-                await _sessionManager.UpdateSessionActivityAsync(sessionId);
-            }
-
-            return Ok(ApiResponse<SessionInfoDto>.SuccessResult(sessionInfo));
-        }
-        catch (Exception ex)
+        if (!result.Success)
         {
-            _logger.LogError(ex, "Failed to get session info for {SessionId}", sessionId);
-            return StatusCode(500, ApiResponse<string>.ErrorResult("Internal server error"));
+            RemoveSessionCookie();
+            return Unauthorized(result);
         }
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -124,35 +100,15 @@ public class SessionController : ControllerBase
             return Unauthorized(ApiResponse<string>.ErrorResult("Authentication required"));
         }
 
-        try
-        {
-            var currentSession = await _sessionManager.GetSessionAsync(currentSessionId);
-            if (currentSession?.IsActive != true)
-            {
-                return Unauthorized(ApiResponse<string>.ErrorResult("Invalid session"));
-            }
+        var query = new GetUserSessionsQuery { CurrentSessionId = currentSessionId };
+        var result = await _mediator.Send(query);
 
-            var userSessions = await _sessionManager.GetUserSessionsAsync(currentSession.Username);
-            var sessionDtos = userSessions.Select(s => new SessionDto
-            {
-                SessionId = s.SessionId,
-                Username = s.Username,
-                CreatedAt = s.CreatedAt,
-                LastActivity = s.LastActivity,
-                ExpiresAt = s.ExpiresAt,
-                IpAddress = s.IpAddress,
-                UserAgent = s.UserAgent,
-                Status = s.Status
-            }).ToList();
-
-            return Ok(ApiResponse<List<SessionDto>>.SuccessResult(sessionDtos,
-                $"Nalezeno {sessionDtos.Count} sessions"));
-        }
-        catch (Exception ex)
+        if (!result.Success)
         {
-            _logger.LogError(ex, "Failed to get user sessions for session {SessionId}", currentSessionId);
-            return StatusCode(500, ApiResponse<string>.ErrorResult("Internal server error"));
+            return Unauthorized(result);
         }
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -163,24 +119,15 @@ public class SessionController : ControllerBase
     public async Task<IActionResult> Logout()
     {
         var sessionId = GetSessionIdFromRequest();
-        if (string.IsNullOrEmpty(sessionId))
-        {
-            return Ok(ApiResponse<string>.SuccessResult("No active session"));
-        }
+        var command = new SessionLogoutCommand { SessionId = sessionId };
+        var result = await _mediator.Send(command);
 
-        try
+        if (result.Success)
         {
-            await _sessionManager.RemoveSessionAsync(sessionId);
             RemoveSessionCookie();
+        }
 
-            _logger.LogInformation("Session logged out: {SessionId}", sessionId);
-            return Ok(ApiResponse<string>.SuccessResult("Logout successful", "Odhlášení proběhlo úspěšně"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to logout session {SessionId}", sessionId);
-            return StatusCode(500, ApiResponse<string>.ErrorResult("Internal server error"));
-        }
+        return Ok(result);
     }
 
     /// <summary>
@@ -198,39 +145,25 @@ public class SessionController : ControllerBase
             return Unauthorized(ApiResponse<string>.ErrorResult("Authentication required"));
         }
 
-        try
+        var command = new RevokeSessionCommand
         {
-            var currentSession = await _sessionManager.GetSessionAsync(currentSessionId);
-            var targetSession = await _sessionManager.GetSessionAsync(sessionId);
+            CurrentSessionId = currentSessionId,
+            TargetSessionId = sessionId
+        };
 
-            if (currentSession?.IsActive != true)
-            {
-                return Unauthorized(ApiResponse<string>.ErrorResult("Invalid current session"));
-            }
+        var result = await _mediator.Send(command);
 
-            if (targetSession == null)
-            {
-                return NotFound(ApiResponse<string>.ErrorResult("Target session not found"));
-            }
-
-            // Uživatel může rušit pouze své vlastní sessions
-            if (!currentSession.Username.Equals(targetSession.Username, StringComparison.OrdinalIgnoreCase))
-            {
+        if (!result.Success)
+        {
+            if (result.Message?.Contains("Invalid current session") == true)
+                return Unauthorized(result);
+            if (result.Message?.Contains("Forbidden") == true)
                 return Forbid();
-            }
-
-            await _sessionManager.RemoveSessionAsync(sessionId);
-
-            _logger.LogInformation("Session {SessionId} revoked by user {Username}",
-                sessionId, currentSession.Username);
-
-            return Ok(ApiResponse<string>.SuccessResult("Session revoked successfully"));
+            if (result.Message?.Contains("not found") == true)
+                return NotFound(result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to revoke session {SessionId}", sessionId);
-            return StatusCode(500, ApiResponse<string>.ErrorResult("Internal server error"));
-        }
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -247,33 +180,15 @@ public class SessionController : ControllerBase
             return Unauthorized(ApiResponse<string>.ErrorResult("Authentication required"));
         }
 
-        try
+        var command = new LogoutAllOtherSessionsCommand { CurrentSessionId = currentSessionId };
+        var result = await _mediator.Send(command);
+
+        if (!result.Success)
         {
-            var currentSession = await _sessionManager.GetSessionAsync(currentSessionId);
-            if (currentSession?.IsActive != true)
-            {
-                return Unauthorized(ApiResponse<string>.ErrorResult("Invalid session"));
-            }
-
-            var userSessions = await _sessionManager.GetUserSessionsAsync(currentSession.Username);
-            var otherSessions = userSessions.Where(s => s.SessionId != currentSessionId).ToList();
-
-            foreach (var session in otherSessions)
-            {
-                await _sessionManager.RemoveSessionAsync(session.SessionId);
-            }
-
-            _logger.LogInformation("All other sessions logged out for user {Username}, kept current: {SessionId}",
-                currentSession.Username, currentSessionId);
-
-            return Ok(ApiResponse<string>.SuccessResult("All other sessions logged out",
-                $"Ukončeno {otherSessions.Count} ostatních sessions"));
+            return Unauthorized(result);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to logout all other sessions for {SessionId}", currentSessionId);
-            return StatusCode(500, ApiResponse<string>.ErrorResult("Internal server error"));
-        }
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -283,16 +198,9 @@ public class SessionController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<SessionStatistics>), 200)]
     public async Task<IActionResult> GetStatistics()
     {
-        try
-        {
-            var stats = await _sessionManager.GetStatisticsAsync();
-            return Ok(ApiResponse<SessionStatistics>.SuccessResult(stats));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get session statistics");
-            return StatusCode(500, ApiResponse<string>.ErrorResult("Internal server error"));
-        }
+        var query = new GetSessionStatisticsQuery();
+        var result = await _mediator.Send(query);
+        return Ok(result);
     }
 
     #region Helper Methods
