@@ -89,11 +89,26 @@ namespace MagentaTV.Services.Background.Core
             _metrics.AddOrUpdate(name, value, (key, oldValue) => value);
         }
 
-        protected T? GetMetric<T>(string name)
+        protected T GetMetric<T>(string name, T defaultValue = default!)
         {
-            if (_metrics.TryGetValue(name, out var value) && value is T typedValue)
-                return typedValue;
-            return default;
+            if (_metrics.TryGetValue(name, out var value))
+            {
+                try
+                {
+                    if (value is T typedValue)
+                        return typedValue;
+
+                    // Try conversion
+                    if (value != null)
+                        return (T)Convert.ChangeType(value, typeof(T));
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Failed to convert metric {MetricName} to {Type}, using default",
+                        name, typeof(T).Name);
+                }
+            }
+            return defaultValue;
         }
 
         protected IServiceScope CreateScope()

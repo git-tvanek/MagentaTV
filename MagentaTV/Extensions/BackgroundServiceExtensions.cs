@@ -1,7 +1,7 @@
 ﻿using MagentaTV.Configuration;
+using MagentaTV.Services.Background;
 using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background.Events;
-using MagentaTV.Services.Background.Services;
 
 namespace MagentaTV.Extensions
 {

@@ -3,7 +3,7 @@ using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background.Events;
 using System.Diagnostics;
 
-namespace MagentaTV.Services.Background.Services
+namespace MagentaTV.Services.Background
 {
     public class QueuedBackgroundService : BaseBackgroundService
     {
