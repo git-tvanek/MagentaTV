@@ -1,4 +1,4 @@
-﻿using MagentaTV.Services.Background.Core.MagentaTV.Services.Background.Core;
+﻿using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background.Events;
 using System.Collections.Concurrent;
 using System.Diagnostics;

@@ -72,6 +72,7 @@ namespace MagentaTV.Configuration
         /// </summary>
         public string SameSiteMode { get; set; } = "Strict";
 
+
         public void Validate()
         {
             if (DefaultDurationHours > MaxDurationHours)
@@ -80,8 +81,27 @@ namespace MagentaTV.Configuration
             if (MaxConcurrentSessions < 1)
                 throw new ArgumentException("MaxConcurrentSessions must be at least 1");
 
-            if (string.IsNullOrWhiteSpace(EncryptionKey) || EncryptionKey.Length < 32)
-                throw new ArgumentException("EncryptionKey must be at least 32 characters long");
+            // Enhanced encryption key validation
+            var encryptionKey = GetEncryptionKey();
+            if (string.IsNullOrWhiteSpace(encryptionKey) || encryptionKey.Length < 32)
+                throw new ArgumentException("EncryptionKey must be at least 32 characters long. Set via environment variable SESSION_ENCRYPTION_KEY in production.");
+        }
+
+        /// <summary>
+        /// Gets encryption key from environment variable in production or config in development
+        /// </summary>
+        public string GetEncryptionKey()
+        {
+            // In production, prefer environment variable
+            var envKey = Environment.GetEnvironmentVariable("SESSION_ENCRYPTION_KEY");
+            if (!string.IsNullOrEmpty(envKey))
+                return envKey;
+
+            // Fallback to config (development only)
+            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+                return EncryptionKey;
+
+            throw new InvalidOperationException("SESSION_ENCRYPTION_KEY environment variable must be set in production");
         }
     }
 }

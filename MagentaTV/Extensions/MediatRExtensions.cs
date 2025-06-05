@@ -1,5 +1,4 @@
-﻿using MagentaTV.Application.Behaviors.MagentaTV.Application.Behaviors;
-using MagentaTV.Application.Behaviors;
+﻿using MagentaTV.Application.Behaviors;
 using MediatR;
 
 namespace MagentaTV.Extensions
