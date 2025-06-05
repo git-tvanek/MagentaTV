@@ -387,17 +387,21 @@ namespace MagentaTV.Application.EventHandlers
 
                     try
                     {
-                        // Zde by byla implementace security incident processing
-                        // - Email alerts
-                        // - External security system notifications
-                        // - Temporary account restrictions
-                        // - Threat intelligence feeds
+                        var incidentEntry = new
+                        {
+                            Username = notification.Username,
+                            SessionId = notification.SessionId,
+                            Reason = notification.Reason,
+                            Timestamp = notification.Timestamp,
+                            ProcessedAt = DateTime.UtcNow
+                        };
+
+                        var file = Path.Combine("data", "security", $"incidents_{DateTime.UtcNow:yyyyMM}.log");
+                        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                        await File.AppendAllTextAsync(file, System.Text.Json.JsonSerializer.Serialize(incidentEntry) + Environment.NewLine, ct);
 
                         logger.LogWarning("Security incident processed for user {Username}: session revocation",
                             notification.Username);
-
-                        // TODO: Implement actual security incident handling
-                        // await securityService.ProcessIncidentAsync(incident);
                     }
                     catch (Exception ex)
                     {

@@ -1,4 +1,5 @@
 ﻿using MagentaTV.Models;
+using MagentaTV.Services.TokenStorage;
 
 namespace MagentaTV.Services;
 
@@ -43,4 +44,9 @@ public interface IMagenta
     /// Generování XMLTV
     /// </summary>
     string GenerateXmlTv(List<EpgItemDto> epg, int channelId);
+
+    /// <summary>
+    /// Obnoví access token pomocí refresh tokenu
+    /// </summary>
+    Task<TokenData?> RefreshTokensAsync(TokenData currentTokens);
 }
