@@ -1,4 +1,5 @@
 ﻿using MagentaTV.Models.Background;
+using MagentaTV.Services.Background.Core;
 using System.Collections.Concurrent;
 
 namespace MagentaTV.Services.Background

@@ -1,4 +1,5 @@
 ﻿using MagentaTV.Models.Background;
+using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background.Events;
 using System.Diagnostics;
 
@@ -87,6 +88,7 @@ namespace MagentaTV.Services.Background.Services
             {
                 workItem.Status = WorkItemStatus.Failed;
                 workItem.Exceptions.Add(ex);
+                workItem.ErrorMessage = ex.Message;
                 errorMessage = ex.Message;
 
                 Logger.LogError(ex, "Work item {Id} ({Name}) failed", workItem.Id, workItem.Name);
