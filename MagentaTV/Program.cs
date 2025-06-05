@@ -36,7 +36,12 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "MagentaTV API",
         Version = "v1",
-        Description = "API wrapper pro MagentaTV služby s session managementem"
+// HTTP context accessor for behaviors
+builder.Services.AddHttpContextAccessor();
+
+// MediatR and pipeline behaviors
+builder.Services.AddMediatRWithBehaviors();
+        Description = "API wrapper pro MagentaTV sluÅ¾by s session managementem"
     });
 });
 
@@ -84,7 +89,7 @@ if (builder.Environment.IsDevelopment())
 }
 else
 {
-    // Pro produkci mùžete pozdìji implementovat DatabaseSessionManager nebo RedisSessionManager
+    // Pro produkci mÃ¹Å¾ete pozdÃ¬ji implementovat DatabaseSessionManager nebo RedisSessionManager
     builder.Services.AddSingleton<ISessionManager, InMemorySessionManager>();
 }
 
@@ -295,7 +300,7 @@ public class MagentaTVHealthCheck : IHealthCheck
     {
         try
         {
-            // Pokus o získání kanálù jako test zdraví
+}
             var channels = await _magentaService.GetChannelsAsync();
 
             var data = new Dictionary<string, object>
