@@ -20,7 +20,7 @@ using Polly;
 using Polly.Extensions.Http;
 using SessionOptions = MagentaTV.Configuration.SessionOptions;
 
-namespace MagentaTV
+namespace MagentaTV.Application.Commands
 {
     public class Program
     {
@@ -185,7 +185,7 @@ namespace MagentaTV
 
             // Health checks
             services.AddHealthChecks()
-                .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy())
+                .AddCheck("self", () => HealthCheckResult.Healthy())
                 .AddCheck<MagentaTVHealthCheck>("magentatv_api")
                 .AddCheck<SessionHealthCheck>("session_manager")
                 .AddCheck<TokenStorageHealthCheck>("token_storage");
@@ -261,7 +261,7 @@ namespace MagentaTV
                     retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
                     onRetry: (outcome, timespan, retryCount, context) =>
                     {
-                        var logger = context.Values.ContainsKey("logger") ? context.Values["logger"] as ILogger : null;
+                        var logger = context.ContainsKey("logger") ? context["logger"] as ILogger : null;
                         logger?.LogWarning("Delaying for {delay}ms, then making retry {retry}.", timespan.TotalMilliseconds, retryCount);
                     });
         }
