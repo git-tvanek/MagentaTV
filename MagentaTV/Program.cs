@@ -1,4 +1,3 @@
-// MagentaTV/Program.cs
 using MagentaTV.Configuration;
 using MagentaTV.Services;
 using MagentaTV.Services.Session;
