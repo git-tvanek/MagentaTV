@@ -52,7 +52,7 @@ namespace MagentaTV.Services.Background.Services
 
         private async Task ProcessWorkItemAsync(BackgroundWorkItem workItem, CancellationToken stoppingToken)
         {
-            workItem.Status = WorkItemStatus.Running;
+            workItem.Status = BackgroundWorkItemStatus.Running;
             workItem.StartedAt = DateTime.UtcNow;
 
             // Publish start event
@@ -75,7 +75,7 @@ namespace MagentaTV.Services.Background.Services
                 using var scope = CreateScope();
                 await workItem.WorkItem(scope.ServiceProvider, stoppingToken);
 
-                workItem.Status = WorkItemStatus.Completed;
+                workItem.Status = BackgroundWorkItemStatus.Completed;
                 success = true;
 
                 Logger.LogInformation("Completed work item {Id} ({Name}) in {Duration}ms",
@@ -86,7 +86,7 @@ namespace MagentaTV.Services.Background.Services
             }
             catch (Exception ex)
             {
-                workItem.Status = WorkItemStatus.Failed;
+                workItem.Status = BackgroundWorkItemStatus.Failed;
                 workItem.Exceptions.Add(ex);
                 workItem.ErrorMessage = ex.Message;
                 errorMessage = ex.Message;
