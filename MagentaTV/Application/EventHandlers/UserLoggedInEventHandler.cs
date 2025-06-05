@@ -1,6 +1,8 @@
 ﻿using MagentaTV.Application.Events;
 using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background;
+using MagentaTV.Services;
+using MagentaTV.Services.Session;
 using MediatR;
 
 namespace MagentaTV.Application.EventHandlers
@@ -28,7 +30,22 @@ namespace MagentaTV.Application.EventHandlers
                 Name = "User Data Preload",
                 Type = "USER_PRELOAD",
                 Priority = 10,
-                Parameters = new() { ["username"] = notification.Username }
+                Parameters = new() { ["username"] = notification.Username },
+                WorkItem = async (provider, ct) =>
+                {
+                    var logger = provider.GetRequiredService<ILogger<UserLoggedInEventHandler>>();
+                    var magenta = provider.GetRequiredService<IMagenta>();
+
+                    try
+                    {
+                        await magenta.GetChannelsAsync();
+                        logger.LogDebug("Preloaded channel data for {Username}", notification.Username);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to preload data for user {Username}", notification.Username);
+                    }
+                }
             };
 
             await _backgroundManager.QueueWorkItemAsync(preloadWork);
@@ -44,6 +61,22 @@ namespace MagentaTV.Application.EventHandlers
                     ["username"] = notification.Username,
                     ["loginTime"] = notification.Timestamp,
                     ["ipAddress"] = notification.IpAddress
+                },
+                WorkItem = async (provider, ct) =>
+                {
+                    var logger = provider.GetRequiredService<ILogger<UserLoggedInEventHandler>>();
+                    var sessionManager = provider.GetRequiredService<ISessionManager>();
+
+                    try
+                    {
+                        var stats = await sessionManager.GetStatisticsAsync();
+                        logger.LogDebug("Login stats updated for {Username}. Active sessions: {Count}",
+                            notification.Username, stats.TotalActiveSessions);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to update login stats for user {Username}", notification.Username);
+                    }
                 }
             };
 
