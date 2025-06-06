@@ -1,6 +1,8 @@
 # MagentaTV API
 
-Tento repozitář obsahuje ASP.NET Core aplikaci poskytující REST rozhraní pro služby MagentaTV. Projekt slouží jako "wrapper" nad oficiálním API a přidává správu relací, generování playlistů a další pomocné funkce.
+**MagentaTV API** je otevřená brána k televiznímu obsahu MagentaTV. Díky této ASP.NET Core aplikaci můžete pohodlně obsloužit oficiální API, bezpečně spravovat relace a vytvářet vlastní playlisty či integrační služby. Projekt míří na vývojáře a nadšence, kteří chtějí využívat MagentaTV ve svých aplikacích bez složité konfigurace.
+
+Rychlé starty, přehledné rozhraní a možnost libovolného rozšíření – to je MagentaTV API v kostce. Ať už stavíte domácí IPTV řešení, nebo chcete pouze automatizovat přístup k živému vysílání, tato aplikace vám poskytne všechny potřebné nástroje.
 
 ## Požadavky
 - .NET SDK 9.0 (preview)
@@ -11,17 +13,13 @@ Tento repozitář obsahuje ASP.NET Core aplikaci poskytující REST rozhraní pr
 - `MagentaTV.sln` – solution soubor
 - `appsettings.Production.json` – ukázková konfigurace
 
-## Základní funkce
-- **Autentizace a správa session** – koncové body v `AuthController` a `SessionController`
-- **Získání kanálů, EPG a streamů** – koncové body v `MagentaController`
-- **Generování M3U playlistu a XMLTV**
-- **SignalR hub** pro zasílání notifikací (`/hubs/notifications`).
-  Klienti mohou přijímat události o přihlášení, odhlášení uživatele
-  i o dokončení FFmpeg úloh prostřednictvím knihovny SignalR.
-- **Health checks** pro kontrolu dostupnosti služeb a background úloh
-- **Barevná konzole** využívající [Spectre.Console](https://spectreconsole.net)
-  pro přehledné panely a informační hlášky
-- **Pokročilé zpracování chyb** pomocí vlastního middleware, který vrací `ApiResponse` s identifikátorem chyby
+## Co získáte
+- **Okamžitou správu relací a přihlášení** – API obstará autentizaci a správu uživatelských relací za vás.
+- **Přístup ke kanálům, EPG a streamům** – vše přehledně na jednom místě díky koncovým bodům `MagentaController`.
+- **Generování M3U a XMLTV** – připravte svým přehrávačům dokonalý playlist jedním požadavkem.
+- **SignalR notifikace** – sledujte v reálném čase přihlášení uživatelů i dokončení FFmpeg úloh přes `/hubs/notifications`.
+- **Health checks a barevná konzole** – kontrolujte stav služeb a užijte si přehledné výpisy díky [Spectre.Console](https://spectreconsole.net).
+- **Jednotný formát chyb** – vlastní middleware vrací `ApiResponse` s identifikátorem chyby, takže se v logu neztratíte.
 
 ## Spuštění v režimu vývoje
 ```bash
