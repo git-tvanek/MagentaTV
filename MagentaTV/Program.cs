@@ -1,3 +1,5 @@
+// Entry point for the MagentaTV REST API wrapper. This file configures
+// dependency injection, middlewares and starts the ASP.NET Core application.
 using MagentaTV.Configuration;
 using MagentaTV.Services;
 using MagentaTV.Services.Channels;

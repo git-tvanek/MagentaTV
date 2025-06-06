@@ -1,4 +1,4 @@
-﻿using MagentaTV.Configuration;
+using MagentaTV.Configuration;
 using MagentaTV.Models;
 using MagentaTV.Services;
 using MagentaTV.Services.TokenStorage;
@@ -12,6 +12,11 @@ using System.Xml.Linq;
 
 namespace MagentaTV.Services
 {
+    /// <summary>
+    /// High level client responsible for communicating with the MagentaTV API
+    /// and caching results. It also manages authentication tokens via
+    /// <see cref="ITokenStorage"/>.
+    /// </summary>
     public class Magenta : IMagenta
     {
         private readonly HttpClient _httpClient;
@@ -81,6 +86,14 @@ namespace MagentaTV.Services
             }
         }
 
+        /// <summary>
+        /// Performs a full login flow using the provided user credentials.
+        /// The method initializes a device session, authenticates the user and
+        /// persists the received tokens if configured to do so.
+        /// </summary>
+        /// <param name="username">MagentaTV account name.</param>
+        /// <param name="password">Password for the account.</param>
+        /// <returns><c>true</c> when login succeeded.</returns>
         public async Task<bool> LoginAsync(string username, string password)
         {
             var stopwatch = Stopwatch.StartNew();
