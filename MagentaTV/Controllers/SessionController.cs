@@ -5,6 +5,7 @@ using MagentaTV.Models.Session;
 using MagentaTV.Services.Session;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using MagentaTV.Extensions;
 
 namespace MagentaTV.Controllers;
 
@@ -30,7 +31,7 @@ public class SessionController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<string>), 401)]
     public async Task<IActionResult> GetCurrentSession()
     {
-        var sessionId = GetSessionIdFromRequest();
+        var sessionId = SessionCookieHelper.GetSessionId(Request);
         if (string.IsNullOrEmpty(sessionId))
         {
             return Unauthorized(ApiResponse<string>.ErrorResult("No active session"));
@@ -41,7 +42,7 @@ public class SessionController : ControllerBase
 
         if (!result.Success)
         {
-            RemoveSessionCookie();
+            SessionCookieHelper.RemoveSessionCookie(Response);
             return Unauthorized(result);
         }
 
@@ -56,7 +57,7 @@ public class SessionController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<string>), 401)]
     public async Task<IActionResult> GetUserSessions()
     {
-        var currentSessionId = GetSessionIdFromRequest();
+        var currentSessionId = SessionCookieHelper.GetSessionId(Request);
         if (string.IsNullOrEmpty(currentSessionId))
         {
             return Unauthorized(ApiResponse<string>.ErrorResult("Authentication required"));
@@ -83,7 +84,7 @@ public class SessionController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<string>), 403)]
     public async Task<IActionResult> RevokeSession(string sessionId)
     {
-        var currentSessionId = GetSessionIdFromRequest();
+        var currentSessionId = SessionCookieHelper.GetSessionId(Request);
         if (string.IsNullOrEmpty(currentSessionId))
         {
             return Unauthorized(ApiResponse<string>.ErrorResult("Authentication required"));
@@ -117,7 +118,7 @@ public class SessionController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<string>), 401)]
     public async Task<IActionResult> LogoutAllOtherSessions()
     {
-        var currentSessionId = GetSessionIdFromRequest();
+        var currentSessionId = SessionCookieHelper.GetSessionId(Request);
         if (string.IsNullOrEmpty(currentSessionId))
         {
             return Unauthorized(ApiResponse<string>.ErrorResult("Authentication required"));
@@ -146,44 +147,5 @@ public class SessionController : ControllerBase
         return Ok(result);
     }
 
-    #region Helper Methods
-
-    private string? GetSessionIdFromRequest()
-    {
-        // Zkusíme cookie
-        if (Request.Cookies.TryGetValue("SessionId", out var cookieValue))
-        {
-            return cookieValue;
-        }
-
-        // Zkusíme Authorization header
-        var authHeader = Request.Headers.Authorization.FirstOrDefault();
-        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Session "))
-        {
-            return authHeader.Substring("Session ".Length);
-        }
-
-        return null;
-    }
-
-    private void SetSessionCookie(string sessionId)
-    {
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true, // HTTPS only v produkci
-            SameSite = SameSiteMode.Strict,
-            Path = "/",
-            Expires = DateTimeOffset.UtcNow.AddDays(30) // Cookie expiruje později než session
-        };
-
-        Response.Cookies.Append("SessionId", sessionId, cookieOptions);
-    }
-
-    private void RemoveSessionCookie()
-    {
-        Response.Cookies.Delete("SessionId");
-    }
-
-    #endregion
+    
 }

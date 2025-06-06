@@ -232,44 +232,5 @@ public class MagentaController : ControllerBase
         return Ok(result);
     }
 
-    #region Private Helper Methods
-
-    private string? GetSessionIdFromRequest()
-    {
-        // Zkusíme cookie
-        if (Request.Cookies.TryGetValue("SessionId", out var cookieValue))
-        {
-            return cookieValue;
-        }
-
-        // Zkusíme Authorization header
-        var authHeader = Request.Headers.Authorization.FirstOrDefault();
-        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Session "))
-        {
-            return authHeader.Substring("Session ".Length);
-        }
-
-        return null;
-    }
-
-    private void SetSessionCookie(string sessionId)
-    {
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true, // HTTPS only v produkci
-            SameSite = SameSiteMode.Strict,
-            Path = "/",
-            Expires = DateTimeOffset.UtcNow.AddDays(30) // Cookie expiruje později než session
-        };
-
-        Response.Cookies.Append("SessionId", sessionId, cookieOptions);
-    }
-
-    private void RemoveSessionCookie()
-    {
-        Response.Cookies.Delete("SessionId");
-    }
-
-    #endregion
+    
 }
