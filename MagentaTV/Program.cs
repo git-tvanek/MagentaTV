@@ -12,6 +12,7 @@ using MagentaTV.Extensions;
 using MagentaTV.Services.Background.Services;
 using MediatR;
 using MagentaTV.Services.Background;
+using MagentaTV.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +34,7 @@ builder.Services.AddTransient<INotificationHandler<UserLoggedOutEvent>, UserLogg
 
 // Add services to the container
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -189,6 +191,7 @@ app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 // Legacy route redirects for removed session endpoints
 app.MapPost("/sessions/create", () => Results.Redirect("/auth/login", permanent: true, preserveMethod: true));
