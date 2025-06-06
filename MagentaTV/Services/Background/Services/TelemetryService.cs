@@ -5,6 +5,7 @@ using MagentaTV.Services.Background;
 using MagentaTV.Services.Cache;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
+using System.Linq;
 
 namespace MagentaTV.Services.Background.Services;
 
@@ -50,11 +51,22 @@ public class TelemetryService : BaseBackgroundService, ITelemetryService
             var services = await manager.GetAllServicesInfoAsync();
             var cacheStats = await cache.GetStatisticsAsync();
 
+            var serviceInfo = services.Select(s => new
+            {
+                Type = s.Type.FullName,
+                s.Name,
+                s.Status,
+                s.StartedAt,
+                s.StoppedAt,
+                s.ErrorMessage,
+                Metrics = s.Metrics
+            }).ToList();
+
             var telemetry = new
             {
                 Timestamp = DateTime.UtcNow,
                 BackgroundStats = stats,
-                ServiceInfo = services,
+                ServiceInfo = serviceInfo,
                 CacheStats = cacheStats
             };
 
