@@ -32,7 +32,14 @@ namespace MagentaTV.Middleware
         private async Task HandleExceptionAsync(HttpContext context, Exception exception)
         {
             var traceId = context.TraceIdentifier;
-            _logger.LogError(exception, "Unhandled exception occurred. TraceId: {TraceId}", traceId);
+            var errorId = Guid.NewGuid();
+
+            if (exception is AggregateException agg)
+            {
+                exception = agg.Flatten().InnerExceptions.First();
+            }
+
+            _logger.LogError(exception, "Unhandled exception occurred. TraceId: {TraceId}, ErrorId: {ErrorId}", traceId, errorId);
 
             context.Response.ContentType = "application/json";
 
@@ -47,9 +54,10 @@ namespace MagentaTV.Middleware
                 Data = _environment.IsDevelopment() ? new
                 {
                     TraceId = traceId,
+                    ErrorId = errorId,
                     StackTrace = exception.StackTrace,
                     InnerException = exception.InnerException?.Message
-                } : new { TraceId = traceId }
+                } : new { TraceId = traceId, ErrorId = errorId }
             };
 
             var options = new JsonSerializerOptions
@@ -88,6 +96,9 @@ namespace MagentaTV.Middleware
 
                 TaskCanceledException =>
                     (HttpStatusCode.RequestTimeout, "Request cancelled", new List<string> { "Request was cancelled or timed out" }),
+
+                NotImplementedException =>
+                    (HttpStatusCode.NotImplemented, "Endpoint not implemented", new List<string> { "This functionality is not available" }),
 
                 _ => (HttpStatusCode.InternalServerError, "An unexpected error occurred", new List<string> { "Please try again later" })
             };
