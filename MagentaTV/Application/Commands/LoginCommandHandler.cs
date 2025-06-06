@@ -8,7 +8,7 @@ using MagentaTV.Application.Events;
 
 namespace MagentaTV.Application.Commands
 {
-    public class LoginCommandHandler : IRequestHandler<LoginCommand, ApiResponse<string>>
+    public class LoginCommandHandler : IRequestHandler<LoginCommand, ApiResponse<SessionCreatedDto>>
     {
         private readonly IMagenta _magentaService;
         private readonly ISessionManager _sessionManager;
@@ -30,7 +30,7 @@ namespace MagentaTV.Application.Commands
             _logger = logger;
         }
 
-        public async Task<ApiResponse<string>> Handle(LoginCommand request, CancellationToken cancellationToken)
+        public async Task<ApiResponse<SessionCreatedDto>> Handle(LoginCommand request, CancellationToken cancellationToken)
         {
             try
             {
@@ -38,7 +38,7 @@ namespace MagentaTV.Application.Commands
                 var loginSuccess = await _magentaService.LoginAsync(request.Username, request.Password);
                 if (!loginSuccess)
                 {
-                    return ApiResponse<string>.ErrorResult("Invalid credentials");
+                    return ApiResponse<SessionCreatedDto>.ErrorResult("Invalid credentials");
                 }
 
                 // 2. Vytvoř session
@@ -46,8 +46,8 @@ namespace MagentaTV.Application.Commands
                 {
                     Username = request.Username,
                     Password = request.Password,
-                    RememberMe = false,
-                    SessionDurationHours = 8
+                    RememberMe = request.RememberMe,
+                    SessionDurationHours = request.SessionDurationHours ?? 8
                 };
 
                 var sessionId = await _sessionManager.CreateSessionAsync(
@@ -69,12 +69,20 @@ namespace MagentaTV.Application.Commands
                     IpAddress = request.IpAddress
                 }, cancellationToken);
 
-                return ApiResponse<string>.SuccessResult("Login successful");
+                var session = await _sessionManager.GetSessionAsync(sessionId);
+                var dto = new SessionCreatedDto
+                {
+                    SessionId = sessionId,
+                    ExpiresAt = session?.ExpiresAt ?? DateTime.UtcNow,
+                    Message = "Login successful"
+                };
+
+                return ApiResponse<SessionCreatedDto>.SuccessResult(dto);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Login failed for user {Username}", request.Username);
-                return ApiResponse<string>.ErrorResult("Login failed");
+                return ApiResponse<SessionCreatedDto>.ErrorResult("Login failed");
             }
         }
     }
