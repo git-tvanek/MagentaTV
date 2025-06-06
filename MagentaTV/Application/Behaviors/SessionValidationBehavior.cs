@@ -47,6 +47,20 @@ namespace MagentaTV.Application.Behaviors
                 throw new UnauthorizedAccessException("Invalid session");
             }
 
+            // Načti session data pro pozdější použití
+            _logger.LogDebug("Loading session data for {SessionId}", sessionId);
+            var sessionData = await _sessionManager.GetSessionAsync(sessionId);
+            if (sessionData == null)
+            {
+                _logger.LogWarning("Session {SessionId} validated but no data found", sessionId);
+            }
+            else
+            {
+                httpContext.Items["CurrentSession"] = sessionData;
+                httpContext.Items["CurrentUsername"] = sessionData.Username;
+                _logger.LogDebug("Session data set in HttpContext for {Username}", sessionData.Username);
+            }
+
             // Aktualizuj aktivitu
             await _sessionManager.UpdateSessionActivityAsync(sessionId);
 
