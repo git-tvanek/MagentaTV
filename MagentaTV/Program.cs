@@ -13,6 +13,7 @@ using MagentaTV.Services.Background.Services;
 using MediatR;
 using MagentaTV.Services.Background;
 using MagentaTV.Hubs;
+using MagentaTV.Services.Network;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -55,8 +56,18 @@ builder.Services.AddMediatRWithBehaviors();
 // Memory cache
 builder.Services.AddMemoryCache();
 
-// HTTP Client - simplified without Polly for now
-builder.Services.AddHttpClient<IMagenta, Magenta>();
+// Network configuration and service
+builder.Services.Configure<NetworkOptions>(
+    builder.Configuration.GetSection(NetworkOptions.SectionName));
+builder.Services.AddSingleton<INetworkService, NetworkService>();
+
+// HTTP Client configured via NetworkService
+builder.Services.AddHttpClient<IMagenta, Magenta>()
+    .ConfigurePrimaryHttpMessageHandler(sp =>
+    {
+        var network = sp.GetRequiredService<INetworkService>();
+        return network.CreateHttpMessageHandler();
+    });
 
 // Configuration options with validation
 builder.Services.Configure<MagentaTVOptions>(

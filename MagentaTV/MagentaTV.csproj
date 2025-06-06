@@ -27,9 +27,10 @@
 	<ItemGroup>
 		<Folder Include="data\" />
 		<Folder Include="logs\" />
-		<Folder Include="Models\Session\" />
-		<Folder Include="Services\Session\" />
-	</ItemGroup>
+                <Folder Include="Models\Session\" />
+                <Folder Include="Services\Session\" />
+                <Folder Include="Services\Network\" />
+        </ItemGroup>
 
 	<ItemGroup>
 		<None Update="dev_id.txt">
