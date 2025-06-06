@@ -32,6 +32,7 @@ builder.Services.AddBackgroundService<TokenRefreshService>();
 builder.Services.AddBackgroundService<SessionCleanupService>();
 builder.Services.AddBackgroundService<CacheWarmingService>();
 builder.Services.AddBackgroundService<TelemetryService>();
+builder.Services.AddBackgroundService<DiscoveryResponderService>();
 
 
 builder.Services.AddSingleton<ICacheWarmingService>(provider =>
@@ -74,6 +75,8 @@ builder.Services.AddFfmpeg(builder.Configuration);
 builder.Services.Configure<NetworkOptions>(
     builder.Configuration.GetSection(NetworkOptions.SectionName));
 builder.Services.AddSingleton<INetworkService, NetworkService>();
+builder.Services.Configure<DiscoveryOptions>(
+    builder.Configuration.GetSection(DiscoveryOptions.SectionName));
 
 // HTTP Client configured via NetworkService
 builder.Services.AddHttpClient<IMagenta, Magenta>()
