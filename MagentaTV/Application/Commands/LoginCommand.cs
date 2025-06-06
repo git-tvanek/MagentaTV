@@ -1,9 +1,10 @@
 ﻿using MagentaTV.Models;
+using MagentaTV.Models.Session;
 using MediatR;
 
 namespace MagentaTV.Application.Commands
 {
-    public class LoginCommand : IRequest<ApiResponse<string>>
+    public class LoginCommand : IRequest<ApiResponse<SessionCreatedDto>>
     {
         public string Username { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
