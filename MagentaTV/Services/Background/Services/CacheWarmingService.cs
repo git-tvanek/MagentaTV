@@ -1,6 +1,7 @@
 ﻿using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background.Events;
 using MagentaTV.Services.TokenStorage;
+using MagentaTV.Services.Channels;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace MagentaTV.Services.Background.Services
@@ -27,7 +28,7 @@ namespace MagentaTV.Services.Background.Services
                 await ExecuteWithEventsAsync("CacheWarming", async () =>
                 {
                     using var scope = CreateScope();
-                    var magentaService = scope.ServiceProvider.GetRequiredService<IMagenta>();
+                    var channelService = scope.ServiceProvider.GetRequiredService<IChannelService>();
                     var tokenStorage = scope.ServiceProvider.GetRequiredService<ITokenStorage>();
                     var cache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
 
@@ -52,7 +53,7 @@ namespace MagentaTV.Services.Background.Services
 
                     try
                     {
-                        var channels = await magentaService.GetChannelsAsync();
+                        var channels = await channelService.GetChannelsAsync();
                         Logger.LogInformation("Cache warmed with {ChannelCount} channels", channels.Count);
 
                         // Update metrics
@@ -116,9 +117,9 @@ namespace MagentaTV.Services.Background.Services
                 Logger.LogInformation("Manual cache warming triggered");
 
                 using var scope = CreateScope();
-                var magentaService = scope.ServiceProvider.GetRequiredService<IMagenta>();
+                var channelService = scope.ServiceProvider.GetRequiredService<IChannelService>();
 
-                var channels = await magentaService.GetChannelsAsync();
+                var channels = await channelService.GetChannelsAsync();
                 Logger.LogInformation("Manual cache warming completed with {ChannelCount} channels", channels.Count);
 
                 SetMetric("manual_warms", GetMetric<long>("manual_warms") + 1);

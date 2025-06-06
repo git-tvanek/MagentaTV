@@ -1,17 +1,17 @@
 ﻿using MagentaTV.Models;
-using MagentaTV.Services;
+using MagentaTV.Services.Stream;
 using MediatR;
 
 namespace MagentaTV.Application.Queries
 {
     public class GetCatchupStreamQueryHandler : IRequestHandler<GetCatchupStreamQuery, ApiResponse<StreamUrlDto>>
     {
-        private readonly IMagenta _magentaService;
+        private readonly IStreamService _streamService;
         private readonly ILogger<GetCatchupStreamQueryHandler> _logger;
 
-        public GetCatchupStreamQueryHandler(IMagenta magentaService, ILogger<GetCatchupStreamQueryHandler> logger)
+        public GetCatchupStreamQueryHandler(IStreamService streamService, ILogger<GetCatchupStreamQueryHandler> logger)
         {
-            _magentaService = magentaService;
+            _streamService = streamService;
             _logger = logger;
         }
 
@@ -19,7 +19,7 @@ namespace MagentaTV.Application.Queries
         {
             try
             {
-                var url = await _magentaService.GetCatchupStreamUrlAsync(request.ScheduleId);
+                var url = await _streamService.GetCatchupStreamUrlAsync(request.ScheduleId);
                 if (string.IsNullOrEmpty(url))
                 {
                     return ApiResponse<StreamUrlDto>.ErrorResult("Catchup stream not found",

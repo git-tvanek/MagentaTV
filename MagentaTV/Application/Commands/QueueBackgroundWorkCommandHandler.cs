@@ -1,7 +1,8 @@
 ﻿using MagentaTV.Models;
 using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background;
-using MagentaTV.Services;
+using MagentaTV.Services.Channels;
+using MagentaTV.Services.Epg;
 using MediatR;
 
 namespace MagentaTV.Application.Commands
@@ -41,15 +42,15 @@ namespace MagentaTV.Application.Commands
             {
                 "CACHE_REFRESH" => async (provider, ct) =>
                 {
-                    var magenta = provider.GetRequiredService<IMagenta>();
-                    await magenta.GetChannelsAsync();
+                    var channelService = provider.GetRequiredService<IChannelService>();
+                    await channelService.GetChannelsAsync();
                 }
                 ,
                 "EPG_PRELOAD" => async (provider, ct) =>
                 {
-                    var magenta = provider.GetRequiredService<IMagenta>();
+                    var epgService = provider.GetRequiredService<IEpgService>();
                     var channelId = (int)parameters["channelId"];
-                    await magenta.GetEpgAsync(channelId);
+                    await epgService.GetEpgAsync(channelId);
                 }
                 ,
                 _ => (provider, ct) => Task.CompletedTask
