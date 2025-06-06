@@ -15,7 +15,9 @@ Tento repozitář obsahuje ASP.NET Core aplikaci poskytující REST rozhraní pr
 - **Autentizace a správa session** – koncové body v `AuthController` a `SessionController`
 - **Získání kanálů, EPG a streamů** – koncové body v `MagentaController`
 - **Generování M3U playlistu a XMLTV**
-- **SignalR hub** pro zasílání notifikací
+- **SignalR hub** pro zasílání notifikací (`/hubs/notifications`).
+  Klienti mohou přijímat události o přihlášení, odhlášení uživatele
+  i o dokončení FFmpeg úloh prostřednictvím knihovny SignalR.
 - **Health checks** pro kontrolu dostupnosti služeb a background úloh
 
 ## Spuštění v režimu vývoje

@@ -1,18 +1,24 @@
 using MagentaTV.Application.Events;
+using MagentaTV.Hubs;
 using MediatR;
+using Microsoft.AspNetCore.SignalR;
 
 namespace MagentaTV.Application.EventHandlers;
 
 public class FfmpegJobCompletedEventHandler : INotificationHandler<FfmpegJobCompletedEvent>
 {
     private readonly ILogger<FfmpegJobCompletedEventHandler> _logger;
+    private readonly IHubContext<NotificationHub> _hubContext;
 
-    public FfmpegJobCompletedEventHandler(ILogger<FfmpegJobCompletedEventHandler> logger)
+    public FfmpegJobCompletedEventHandler(
+        IHubContext<NotificationHub> hubContext,
+        ILogger<FfmpegJobCompletedEventHandler> logger)
     {
+        _hubContext = hubContext;
         _logger = logger;
     }
 
-    public Task Handle(FfmpegJobCompletedEvent notification, CancellationToken cancellationToken)
+    public async Task Handle(FfmpegJobCompletedEvent notification, CancellationToken cancellationToken)
     {
         if (notification.Success)
         {
@@ -23,6 +29,6 @@ public class FfmpegJobCompletedEventHandler : INotificationHandler<FfmpegJobComp
             _logger.LogWarning("FFmpeg job {JobId} failed: {Error}", notification.JobId, notification.ErrorMessage);
         }
 
-        return Task.CompletedTask;
+        await _hubContext.Clients.All.SendAsync("FfmpegJobCompleted", notification, cancellationToken);
     }
 }
