@@ -22,6 +22,7 @@ using MagentaTV.Services.Network;
 using MagentaTV.Services.Cache;
 using MagentaTV.Services.Configuration;
 using MagentaTV.Services.Ffmpeg;
+using Spectre.Console;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -189,6 +190,20 @@ if (builder.Environment.IsDevelopment())
 
 var app = builder.Build();
 
+// Pretty console output using Spectre.Console
+AnsiConsole.Write(new FigletText("MagentaTV API").Color(Color.MediumPurple));
+
+var infoTable = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
+infoTable.AddColumn("[yellow]Key[/]");
+infoTable.AddColumn("[yellow]Value[/]");
+infoTable.AddRow("Environment", app.Environment.EnvironmentName);
+infoTable.AddRow("Version", typeof(Program).Assembly.GetName().Version?.ToString() ?? "n/a");
+AnsiConsole.Write(new Panel(infoTable)
+{
+    Header = new PanelHeader("Startup Info"),
+    Padding = new Padding(1, 1, 1, 1)
+});
+
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
@@ -263,7 +278,16 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
 try
 {
     var serviceManager = app.Services.GetRequiredService<IBackgroundServiceManager>();
-    await serviceManager.StartAllServicesIntelligentlyAsync(); // 
+
+    await AnsiConsole.Status()
+        .Spinner(Spinner.Known.Dots)
+        .StartAsync("Starting background services...", async ctx =>
+        {
+            await serviceManager.StartAllServicesIntelligentlyAsync();
+            ctx.Status("Background services started");
+        });
+
+    AnsiConsole.MarkupLine("[green]Background services running[/]");
 
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
     logger.LogInformation("All background services started intelligently");
@@ -272,6 +296,8 @@ catch (Exception ex)
 {
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
     logger.LogError(ex, "Failed to start background services intelligently, falling back to basic startup");
+
+    AnsiConsole.MarkupLine("[yellow]Background services fallback startup[/]");
 
  
     try
@@ -286,6 +312,7 @@ catch (Exception ex)
     {
         logger.LogCritical(fallbackEx, "Failed to start background services even in fallback mode");
         // Don't throw - let the app start without background services
+        AnsiConsole.MarkupLine("[red]Background services failed to start[/]");
     }
 }
 

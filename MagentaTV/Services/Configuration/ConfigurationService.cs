@@ -1,5 +1,6 @@
 using MagentaTV.Configuration;
 using Microsoft.Extensions.Options;
+using SessionOptions = MagentaTV.Configuration.SessionOptions;
 
 namespace MagentaTV.Services.Configuration;
 

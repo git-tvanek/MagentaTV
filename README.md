@@ -19,6 +19,8 @@ Tento repozitář obsahuje ASP.NET Core aplikaci poskytující REST rozhraní pr
   Klienti mohou přijímat události o přihlášení, odhlášení uživatele
   i o dokončení FFmpeg úloh prostřednictvím knihovny SignalR.
 - **Health checks** pro kontrolu dostupnosti služeb a background úloh
+- **Barevná konzole** využívající [Spectre.Console](https://spectreconsole.net)
+  pro přehledné panely a informační hlášky
 
 ## Spuštění v režimu vývoje
 ```bash
