@@ -44,11 +44,14 @@ namespace MagentaTV.Application.Commands
                     await _sessionManager.RemoveSessionAsync(request.SessionId);
                 }
 
-                // 2. Vymažeme MagentaTV tokeny
-                await _tokenStorage.ClearTokensAsync();
+                // 2. Vymažeme MagentaTV tokeny pro tuto session
+                if (!string.IsNullOrEmpty(request.SessionId))
+                {
+                    await _tokenStorage.ClearTokensAsync(request.SessionId);
+                }
 
                 // 3. Zavoláme logout na Magenta service
-                await _magentaService.LogoutAsync();
+                await _magentaService.LogoutAsync(request.SessionId ?? string.Empty);
 
                 // 4. Publikujeme event
                 if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(request.SessionId))

@@ -26,8 +26,13 @@ namespace MagentaTV.Application.Queries
             try
             {
                 var currentSession = _httpContextAccessor.HttpContext?.GetCurrentSession();
-                var hasValidTokens = await _tokenStorage.HasValidTokensAsync();
-                var tokens = await _tokenStorage.LoadTokensAsync();
+                bool hasValidTokens = false;
+                TokenData? tokens = null;
+                if (currentSession != null)
+                {
+                    hasValidTokens = await _tokenStorage.HasValidTokensAsync(currentSession.SessionId);
+                    tokens = await _tokenStorage.LoadTokensAsync(currentSession.SessionId);
+                }
 
                 var result = new PingResultDto
                 {

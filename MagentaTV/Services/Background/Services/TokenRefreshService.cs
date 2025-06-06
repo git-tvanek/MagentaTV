@@ -29,27 +29,31 @@ namespace MagentaTV.Services.Background.Services
                     var sessionManager = scope.ServiceProvider.GetRequiredService<ISessionManager>();
                     var magentaService = scope.ServiceProvider.GetRequiredService<IMagenta>();
 
-                    var tokens = await tokenStorage.LoadTokensAsync();
-
-                    // Refresh pokud jsou blízko expiraci
-                    if (tokens?.IsNearExpiry == true)
+                    var stats = await sessionManager.GetStatisticsAsync();
+                    foreach (var username in stats.SessionsByUser.Keys)
                     {
-                        Logger.LogInformation("Refreshing tokens for user: {Username}", tokens.Username);
-
-                        // Zde implementovat refresh logic
-                        var refreshed = await RefreshTokensAsync(magentaService, tokens);
-
-                        if (refreshed != null)
+                        var sessions = await sessionManager.GetUserSessionsAsync(username);
+                        foreach (var session in sessions.Where(s => s.IsActive))
                         {
-                            await tokenStorage.SaveTokensAsync(refreshed);
-
-                            // Publikovat event
-                            await EventBus.PublishAsync(new TokensRefreshedEvent
+                            var tokens = await tokenStorage.LoadTokensAsync(session.SessionId);
+                            if (tokens?.IsNearExpiry == true)
                             {
-                                Username = refreshed.Username,
-                                NewExpiryTime = refreshed.ExpiresAt,
-                                SessionId = "background-refresh"
-                            });
+                                Logger.LogInformation("Refreshing tokens for user: {Username}, session {SessionId}", tokens.Username, session.SessionId);
+
+                                var refreshed = await RefreshTokensAsync(magentaService, tokens);
+                                if (refreshed != null)
+                                {
+                                    await tokenStorage.SaveTokensAsync(session.SessionId, refreshed);
+                                    await sessionManager.RefreshSessionTokensAsync(session.SessionId, refreshed);
+
+                                    await EventBus.PublishAsync(new TokensRefreshedEvent
+                                    {
+                                        Username = refreshed.Username,
+                                        NewExpiryTime = refreshed.ExpiresAt,
+                                        SessionId = session.SessionId
+                                    });
+                                }
+                            }
                         }
                     }
 

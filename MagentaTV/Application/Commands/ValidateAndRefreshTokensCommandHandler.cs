@@ -26,7 +26,7 @@ namespace MagentaTV.Application.Commands
 
         public async Task Handle(ValidateAndRefreshTokensCommand request, CancellationToken cancellationToken)
         {
-            var tokens = await _tokenStorage.LoadTokensAsync();
+            var tokens = await _tokenStorage.LoadTokensAsync(request.Session.SessionId);
 
             if (tokens?.IsValid != true)
             {
@@ -41,7 +41,7 @@ namespace MagentaTV.Application.Commands
                         var refreshed = await _magentaService.RefreshTokensAsync(tokens);
                         if (refreshed != null)
                         {
-                            await _tokenStorage.SaveTokensAsync(refreshed);
+                            await _tokenStorage.SaveTokensAsync(request.Session.SessionId, refreshed);
                             tokens = refreshed;
                             _logger.LogInformation("Token refresh succeeded for user {Username}", request.Session.Username);
                         }
@@ -52,7 +52,7 @@ namespace MagentaTV.Application.Commands
                     }
                 }
 
-                tokens = await _tokenStorage.LoadTokensAsync();
+                tokens = await _tokenStorage.LoadTokensAsync(request.Session.SessionId);
                 if (tokens?.IsValid != true)
                 {
                     _logger.LogError("No valid tokens available for user {Username} in session {SessionId}",

@@ -16,6 +16,7 @@ public class EncryptedFileTokenStorage : ITokenStorage
     private readonly byte[] _key;
     private readonly ILogger<EncryptedFileTokenStorage> _logger;
     private readonly SemaphoreSlim _fileLock = new(1, 1);
+    private const string DefaultSessionId = "default";
 
     public EncryptedFileTokenStorage(
         ILogger<EncryptedFileTokenStorage> logger,
@@ -35,11 +36,27 @@ public class EncryptedFileTokenStorage : ITokenStorage
         _logger.LogInformation("EncryptedFileTokenStorage initialized. Storage path: {StoragePath}", config.StoragePath);
     }
 
-    /// <summary>
-    /// Uloží tokeny do šifrovaného souboru
-    /// </summary>
-    public async Task SaveTokensAsync(TokenData tokens)
+    private string GetSessionFilePath(string sessionId)
     {
+        if (sessionId == DefaultSessionId)
+            return _filePath;
+
+        var safeId = Convert.ToBase64String(Encoding.UTF8.GetBytes(sessionId))
+            .Replace("+", "-").Replace("/", "_");
+        return Path.Combine(Path.GetDirectoryName(_filePath)!, $"tokens_{safeId}.enc");
+    }
+
+    /// <summary>
+    /// Uloží tokeny do šifrovaného souboru (výchozí session)
+    /// </summary>
+    public Task SaveTokensAsync(TokenData tokens) => SaveTokensAsync(DefaultSessionId, tokens);
+
+    /// <summary>
+    /// Uloží tokeny pro danou session
+    /// </summary>
+    public async Task SaveTokensAsync(string sessionId, TokenData tokens)
+    {
+        var path = GetSessionFilePath(sessionId);
         await _fileLock.WaitAsync();
         try
         {
@@ -50,14 +67,14 @@ public class EncryptedFileTokenStorage : ITokenStorage
             });
 
             var encryptedData = Encrypt(json);
-            await File.WriteAllBytesAsync(_filePath, encryptedData);
+            await File.WriteAllBytesAsync(path, encryptedData);
 
-            _logger.LogDebug("Tokens saved successfully for user: {Username}, expires: {ExpiresAt}",
-                tokens.Username, tokens.ExpiresAt);
+            _logger.LogDebug("Tokens saved successfully for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
+                sessionId, tokens.Username, tokens.ExpiresAt);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to save tokens for user: {Username}", tokens.Username);
+            _logger.LogError(ex, "Failed to save tokens for session {SessionId}", sessionId);
             throw;
         }
         finally
@@ -69,18 +86,21 @@ public class EncryptedFileTokenStorage : ITokenStorage
     /// <summary>
     /// Načte tokeny ze šifrovaného souboru
     /// </summary>
-    public async Task<TokenData?> LoadTokensAsync()
+    public Task<TokenData?> LoadTokensAsync() => LoadTokensAsync(DefaultSessionId);
+
+    public async Task<TokenData?> LoadTokensAsync(string sessionId)
     {
+        var path = GetSessionFilePath(sessionId);
         await _fileLock.WaitAsync();
         try
         {
-            if (!File.Exists(_filePath))
+            if (!File.Exists(path))
             {
-                _logger.LogDebug("Token file does not exist: {FilePath}", _filePath);
+                _logger.LogDebug("Token file does not exist: {FilePath}", path);
                 return null;
             }
 
-            var encryptedData = await File.ReadAllBytesAsync(_filePath);
+            var encryptedData = await File.ReadAllBytesAsync(path);
             var json = Decrypt(encryptedData);
 
             var tokens = JsonSerializer.Deserialize<TokenData>(json, new JsonSerializerOptions
@@ -100,7 +120,7 @@ public class EncryptedFileTokenStorage : ITokenStorage
         {
             _logger.LogWarning(ex, "Failed to decrypt tokens - file may be corrupted or key changed");
             // If we can't decrypt, clear the corrupted file
-            await ClearTokensAsync();
+            await ClearTokensAsync(sessionId);
             return null;
         }
         catch (Exception ex)
@@ -117,20 +137,23 @@ public class EncryptedFileTokenStorage : ITokenStorage
     /// <summary>
     /// Vymaže token soubor
     /// </summary>
-    public async Task ClearTokensAsync()
+    public Task ClearTokensAsync() => ClearTokensAsync(DefaultSessionId);
+
+    public async Task ClearTokensAsync(string sessionId)
     {
+        var path = GetSessionFilePath(sessionId);
         await _fileLock.WaitAsync();
         try
         {
-            if (File.Exists(_filePath))
+            if (File.Exists(path))
             {
-                File.Delete(_filePath);
-                _logger.LogDebug("Tokens cleared successfully");
+                File.Delete(path);
+                _logger.LogDebug("Tokens cleared successfully for session {SessionId}", sessionId);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to clear tokens");
+            _logger.LogWarning(ex, "Failed to clear tokens for session {SessionId}", sessionId);
         }
         finally
         {
@@ -141,9 +164,11 @@ public class EncryptedFileTokenStorage : ITokenStorage
     /// <summary>
     /// Zkontroluje, jestli jsou dostupné platné tokeny
     /// </summary>
-    public async Task<bool> HasValidTokensAsync()
+    public Task<bool> HasValidTokensAsync() => HasValidTokensAsync(DefaultSessionId);
+
+    public async Task<bool> HasValidTokensAsync(string sessionId)
     {
-        var tokens = await LoadTokensAsync();
+        var tokens = await LoadTokensAsync(sessionId);
         return tokens?.IsValid == true;
     }
 

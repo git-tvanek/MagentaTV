@@ -54,7 +54,7 @@ namespace MagentaTV.Application.Commands
                     createSessionRequest, request.IpAddress, request.UserAgent);
 
                 // 3. Načti a ulož tokeny
-                var tokens = await _tokenStorage.LoadTokensAsync();
+                var tokens = await _tokenStorage.LoadTokensAsync(sessionId);
                 if (tokens?.IsValid == true)
                 {
                     await _sessionManager.RefreshSessionTokensAsync(sessionId, tokens);

@@ -109,7 +109,7 @@ namespace MagentaTV.Application.EventHandlers
                 _logger.LogDebug("No active sessions remaining for {Username}, scheduling token cleanup",
                     notification.Username);
 
-                await QueueTokenCleanupAsync(notification.Username, "No active sessions");
+                await QueueTokenCleanupAsync(notification.Username, notification.SessionId, "No active sessions");
             }
             else
             {
@@ -128,7 +128,7 @@ namespace MagentaTV.Application.EventHandlers
                 notification.Username);
 
             // Okamžitě vymazat všechny tokeny
-            await QueueTokenCleanupAsync(notification.Username, "Security revocation");
+            await QueueTokenCleanupAsync(notification.Username, notification.SessionId, "Security revocation");
 
             // Zalogovat security incident
             await QueueSecurityIncidentAsync(notification);
@@ -327,7 +327,7 @@ namespace MagentaTV.Application.EventHandlers
         /// <summary>
         /// Naplánuje cleanup tokenů
         /// </summary>
-        private async Task QueueTokenCleanupAsync(string username, string reason)
+        private async Task QueueTokenCleanupAsync(string username, string sessionId, string reason)
         {
             var tokenCleanupWork = new BackgroundWorkItem
             {
@@ -337,6 +337,7 @@ namespace MagentaTV.Application.EventHandlers
                 Parameters = new Dictionary<string, object>
                 {
                     ["username"] = username,
+                    ["sessionId"] = sessionId,
                     ["reason"] = reason
                 },
                 WorkItem = async (provider, ct) =>
@@ -346,17 +347,16 @@ namespace MagentaTV.Application.EventHandlers
 
                     try
                     {
-                        // Zkontrolujeme jestli jsou tokeny pro správného uživatele
-                        var tokens = await tokenStorage.LoadTokensAsync();
+                        var tokens = await tokenStorage.LoadTokensAsync(sessionId);
                         if (tokens?.Username == username)
                         {
-                            await tokenStorage.ClearTokensAsync();
-                            logger.LogInformation("Cleared tokens for user {Username}, reason: {Reason}", username, reason);
+                            await tokenStorage.ClearTokensAsync(sessionId);
+                            logger.LogInformation("Cleared tokens for user {Username}, session {SessionId}, reason: {Reason}", username, sessionId, reason);
                         }
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Failed to clear tokens for user {Username}", username);
+                        logger.LogError(ex, "Failed to clear tokens for user {Username}, session {SessionId}", username, sessionId);
                     }
                 }
             };
