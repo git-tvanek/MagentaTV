@@ -6,6 +6,11 @@ public class NetworkOptions
 {
     public const string SectionName = "Network";
 
+    /// <summary>
+    /// Name of the network interface to configure (e.g. "eth0" or "Ethernet").
+    /// </summary>
+    public string InterfaceName { get; set; } = "eth0";
+
     [RegularExpression(@"^\d{1,3}(\.\d{1,3}){3}$")]
     public string IpAddress { get; set; } = "127.0.0.1";
 
@@ -31,4 +36,10 @@ public class NetworkOptions
     public bool EnableSsl { get; set; } = true;
 
     public bool ValidateServerCertificate { get; set; } = true;
+
+    [Range(0, 86400)]
+    public int PooledConnectionLifetimeSeconds { get; set; } = 0;
+
+    [Range(0, 86400)]
+    public int PooledConnectionIdleTimeoutSeconds { get; set; } = 0;
 }

@@ -204,6 +204,10 @@ AnsiConsole.Write(new Panel(infoTable)
     Padding = new Padding(1, 1, 1, 1)
 });
 
+// Apply network configuration before starting services
+var networkService = app.Services.GetRequiredService<INetworkService>();
+await networkService.ConfigureNetworkAsync();
+
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
