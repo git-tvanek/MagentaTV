@@ -41,7 +41,7 @@ public class FFmpegService : IFFmpegService
                 try
                 {
                     await FFMpegArguments
-                        .FromUrlInput(inputUrl)
+                        .FromUrlInput(new Uri(inputUrl))
                         .OutputToFile(outputFile, overwrite: true)
                         .ProcessAsynchronously(false, ct);
                     status.IsSuccess = true;
