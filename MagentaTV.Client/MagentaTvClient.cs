@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net.Sockets;
+using System.Text;
 using MagentaTV.Client.Models;
 
 namespace MagentaTV.Client;
@@ -100,5 +102,27 @@ public class MagentaTvClient
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ApiResponse<PingResultDto>>()
                ?? new ApiResponse<PingResultDto> { Success = false, Message = "Invalid response" };
+    }
+
+    public static async Task<string?> DiscoverServerAsync(int port = 15998, int timeoutMs = 3000)
+    {
+        using var udp = new UdpClient();
+        udp.EnableBroadcast = true;
+        var request = Encoding.UTF8.GetBytes("MAGENTATV_DISCOVERY_REQUEST");
+        await udp.SendAsync(request, request.Length, new IPEndPoint(IPAddress.Broadcast, port));
+
+        var receiveTask = udp.ReceiveAsync();
+        var completed = await Task.WhenAny(receiveTask, Task.Delay(timeoutMs));
+        if (completed == receiveTask)
+        {
+            var result = receiveTask.Result;
+            var message = Encoding.UTF8.GetString(result.Buffer);
+            const string prefix = "MAGENTATV_DISCOVERY_RESPONSE|";
+            if (message.StartsWith(prefix))
+            {
+                return message.Substring(prefix.Length);
+            }
+        }
+        return null;
     }
 }
