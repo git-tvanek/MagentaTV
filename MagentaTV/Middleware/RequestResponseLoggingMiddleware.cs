@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 
 namespace MagentaTV.Middleware;
 
@@ -45,11 +46,34 @@ public class RequestResponseLoggingMiddleware
         var body = await new StreamReader(request.Body, Encoding.UTF8).ReadToEndAsync();
         request.Body.Position = 0;
 
+        string bodyForLog;
+
+        if (request.Path.StartsWithSegments("/auth/login", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(body);
+                if (dict != null && dict.ContainsKey("password"))
+                {
+                    dict["password"] = "[REDACTED]";
+                }
+                bodyForLog = JsonSerializer.Serialize(dict);
+            }
+            catch (JsonException)
+            {
+                bodyForLog = "[REDACTED]";
+            }
+        }
+        else
+        {
+            bodyForLog = body.Length > 1000 ? body.Substring(0, 1000) + "..." : body;
+        }
+
         _logger.LogInformation("HTTP Request: {Method} {Path} {QueryString} Body: {Body}",
             request.Method,
             request.Path,
             request.QueryString,
-            body.Length > 1000 ? body.Substring(0, 1000) + "..." : body);
+            bodyForLog);
     }
 
     private async Task LogResponse(HttpResponse response, long elapsedMs)
