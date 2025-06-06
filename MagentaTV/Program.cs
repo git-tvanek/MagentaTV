@@ -22,11 +22,14 @@ builder.Services.AddBackgroundServices(builder.Configuration);
 
 builder.Services.AddBackgroundService<TokenRefreshService>();
 builder.Services.AddBackgroundService<SessionCleanupService>();
-builder.Services.AddBackgroundService<CacheWarmingService>(); 
+builder.Services.AddBackgroundService<CacheWarmingService>();
+builder.Services.AddBackgroundService<TelemetryService>();
 
 
 builder.Services.AddSingleton<ICacheWarmingService>(provider =>
     provider.GetRequiredService<CacheWarmingService>());
+builder.Services.AddSingleton<ITelemetryService>(provider =>
+    provider.GetRequiredService<TelemetryService>());
 
 // MediatR Event Handlers
 builder.Services.AddTransient<INotificationHandler<UserLoggedInEvent>, UserLoggedInEventHandler>();
@@ -82,6 +85,8 @@ builder.Services.Configure<CorsOptions>(
     builder.Configuration.GetSection(CorsOptions.SectionName));
 builder.Services.Configure<RateLimitOptions>(
     builder.Configuration.GetSection(RateLimitOptions.SectionName));
+builder.Services.Configure<TelemetryOptions>(
+    builder.Configuration.GetSection(TelemetryOptions.SectionName));
 
 // Validate configuration
 builder.Services.AddSingleton<IValidateOptions<MagentaTV.Configuration.SessionOptions>, ValidateSessionOptions>();
