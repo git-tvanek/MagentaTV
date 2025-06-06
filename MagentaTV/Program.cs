@@ -183,8 +183,8 @@ if (corsOptions?.AllowedOrigins?.Length > 0)
 // Rate limiting
 app.UseRateLimiter();
 
-// Session middleware - IMPORTANT: must be before authorization
-app.UseMiddleware<SessionMiddleware>();
+// Session validation is now handled solely by SessionValidationBehavior
+// app.UseMiddleware<SessionMiddleware>();
 
 app.UseAuthorization();
 
