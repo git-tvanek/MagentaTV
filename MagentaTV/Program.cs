@@ -1,5 +1,8 @@
 using MagentaTV.Configuration;
 using MagentaTV.Services;
+using MagentaTV.Services.Channels;
+using MagentaTV.Services.Epg;
+using MagentaTV.Services.Stream;
 using MagentaTV.Services.Session;
 using MagentaTV.Services.TokenStorage;
 using MagentaTV.Middleware;
@@ -95,6 +98,9 @@ builder.Services.AddSingleton<IValidateOptions<TokenStorageOptions>, ValidateTok
 
 // Register main services
 builder.Services.AddScoped<IMagenta, Magenta>();
+builder.Services.AddScoped<IChannelService, ChannelService>();
+builder.Services.AddScoped<IEpgService, EpgService>();
+builder.Services.AddScoped<IStreamService, StreamService>();
 
 // Token Storage - choose implementation based on environment
 if (builder.Environment.IsDevelopment())
@@ -350,12 +356,12 @@ public class SessionHealthCheck : IHealthCheck
 
 public class MagentaTVHealthCheck : IHealthCheck
 {
-    private readonly IMagenta _magentaService;
+    private readonly IChannelService _channelService;
     private readonly ILogger<MagentaTVHealthCheck> _logger;
 
-    public MagentaTVHealthCheck(IMagenta magentaService, ILogger<MagentaTVHealthCheck> logger)
+    public MagentaTVHealthCheck(IChannelService channelService, ILogger<MagentaTVHealthCheck> logger)
     {
-        _magentaService = magentaService;
+        _channelService = channelService;
         _logger = logger;
     }
 
@@ -365,7 +371,7 @@ public class MagentaTVHealthCheck : IHealthCheck
     {
         try
         {
-            var channels = await _magentaService.GetChannelsAsync();
+            var channels = await _channelService.GetChannelsAsync();
 
             var data = new Dictionary<string, object>
             {

@@ -1,5 +1,5 @@
 ﻿using MagentaTV.Models;
-using MagentaTV.Services;
+using MagentaTV.Services.Channels;
 using MediatR;
 
 namespace MagentaTV.Application.Queries
@@ -11,12 +11,12 @@ namespace MagentaTV.Application.Queries
 
     public class GetChannelsQueryHandler : IRequestHandler<GetChannelsQuery, ApiResponse<List<ChannelDto>>>
     {
-        private readonly IMagenta _magentaService;
+        private readonly IChannelService _channelService;
         private readonly ILogger<GetChannelsQueryHandler> _logger;
 
-        public GetChannelsQueryHandler(IMagenta magentaService, ILogger<GetChannelsQueryHandler> logger)
+        public GetChannelsQueryHandler(IChannelService channelService, ILogger<GetChannelsQueryHandler> logger)
         {
-            _magentaService = magentaService;
+            _channelService = channelService;
             _logger = logger;
         }
 
@@ -24,7 +24,7 @@ namespace MagentaTV.Application.Queries
         {
             try
             {
-                var channels = await _magentaService.GetChannelsAsync();
+                var channels = await _channelService.GetChannelsAsync();
                 return ApiResponse<List<ChannelDto>>.SuccessResult(channels, $"Found {channels.Count} channels");
             }
             catch (Exception ex)

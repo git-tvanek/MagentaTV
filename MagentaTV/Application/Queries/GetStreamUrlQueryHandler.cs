@@ -1,17 +1,17 @@
 ﻿using MagentaTV.Models;
-using MagentaTV.Services;
+using MagentaTV.Services.Stream;
 using MediatR;
 
 namespace MagentaTV.Application.Queries
 {
     public class GetStreamUrlQueryHandler : IRequestHandler<GetStreamUrlQuery, ApiResponse<StreamUrlDto>>
     {
-        private readonly IMagenta _magentaService;
+        private readonly IStreamService _streamService;
         private readonly ILogger<GetStreamUrlQueryHandler> _logger;
 
-        public GetStreamUrlQueryHandler(IMagenta magentaService, ILogger<GetStreamUrlQueryHandler> logger)
+        public GetStreamUrlQueryHandler(IStreamService streamService, ILogger<GetStreamUrlQueryHandler> logger)
         {
-            _magentaService = magentaService;
+            _streamService = streamService;
             _logger = logger;
         }
 
@@ -19,7 +19,7 @@ namespace MagentaTV.Application.Queries
         {
             try
             {
-                var url = await _magentaService.GetStreamUrlAsync(request.ChannelId);
+                var url = await _streamService.GetStreamUrlAsync(request.ChannelId);
                 if (string.IsNullOrEmpty(url))
                 {
                     return ApiResponse<StreamUrlDto>.ErrorResult("Stream not found",

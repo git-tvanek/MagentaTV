@@ -1,7 +1,8 @@
 ﻿using MagentaTV.Application.Events;
 using MagentaTV.Models;
-using MagentaTV.Services;
 using MagentaTV.Services.Background;
+using MagentaTV.Services.Channels;
+using MagentaTV.Services.Epg;
 using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background.Services;
 using MagentaTV.Services.Session;
@@ -68,19 +69,20 @@ namespace MagentaTV.Application.EventHandlers
                 WorkItem = async (provider, ct) =>
                 {
                     var logger = provider.GetRequiredService<ILogger<UserLoggedInEventHandler>>();
-                    var magenta = provider.GetRequiredService<IMagenta>();
+                    var channelService = provider.GetRequiredService<IChannelService>();
+                    var epgService = provider.GetRequiredService<IEpgService>();
 
                     try
                     {
                         logger.LogInformation("Starting immediate cache warming for user {Username}", notification.Username);
 
                         // Načteme kanály
-                        var channels = await magenta.GetChannelsAsync();
+                        var channels = await channelService.GetChannelsAsync();
                         logger.LogInformation("Immediate cache warming completed with {ChannelCount} channels for user {Username}",
                             channels.Count, notification.Username);
 
                         // Pokusíme se načíst i základní EPG pro populární kanály
-                        await WarmPopularChannelsEpgAsync(magenta, channels.Take(5).ToList(), logger);
+                        await WarmPopularChannelsEpgAsync(epgService, channels.Take(5).ToList(), logger);
                     }
                     catch (Exception ex)
                     {
@@ -129,19 +131,20 @@ namespace MagentaTV.Application.EventHandlers
                 WorkItem = async (provider, ct) =>
                 {
                     var logger = provider.GetRequiredService<ILogger<UserLoggedInEventHandler>>();
-                    var magenta = provider.GetRequiredService<IMagenta>();
+                    var channelService = provider.GetRequiredService<IChannelService>();
+                    var epgService = provider.GetRequiredService<IEpgService>();
 
                     try
                     {
                         // Pre-load some popular EPG data
-                        var channels = await magenta.GetChannelsAsync();
+                        var channels = await channelService.GetChannelsAsync();
                         var popularChannels = channels.Take(10).ToList();
 
                         foreach (var channel in popularChannels)
                         {
                             try
                             {
-                                await magenta.GetEpgAsync(channel.ChannelId, DateTime.Now, DateTime.Now.AddHours(6));
+                                await epgService.GetEpgAsync(channel.ChannelId, DateTime.Now, DateTime.Now.AddHours(6));
                                 logger.LogDebug("Preloaded EPG for channel {ChannelId} ({ChannelName})",
                                     channel.ChannelId, channel.Name);
                             }
@@ -210,13 +213,13 @@ namespace MagentaTV.Application.EventHandlers
         /// <summary>
         /// Pre-warm EPG pro populární kanály
         /// </summary>
-        private async Task WarmPopularChannelsEpgAsync(IMagenta magenta, List<ChannelDto> channels, ILogger logger)
+        private async Task WarmPopularChannelsEpgAsync(IEpgService epgService, List<ChannelDto> channels, ILogger logger)
         {
             foreach (var channel in channels)
             {
                 try
                 {
-                    await magenta.GetEpgAsync(channel.ChannelId, DateTime.Now, DateTime.Now.AddHours(3));
+                    await epgService.GetEpgAsync(channel.ChannelId, DateTime.Now, DateTime.Now.AddHours(3));
                     logger.LogDebug("Warmed EPG cache for popular channel {ChannelId}", channel.ChannelId);
                 }
                 catch (Exception ex)
