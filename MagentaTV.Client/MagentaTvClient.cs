@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text;
 using MagentaTV.Client.Models;
+using MagentaTV.Client.Models.Session;
 
 namespace MagentaTV.Client;
 

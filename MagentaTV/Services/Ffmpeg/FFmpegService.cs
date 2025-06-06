@@ -43,7 +43,8 @@ public class FFmpegService : IFFmpegService
                     await FFMpegArguments
                         .FromUrlInput(new Uri(inputUrl))
                         .OutputToFile(outputFile, overwrite: true)
-                        .ProcessAsynchronously(false, ct);
+                        .CancellableThrough(ct)
+                        .ProcessAsynchronously(false);
                     status.IsSuccess = true;
                 }
                 catch (Exception ex)
