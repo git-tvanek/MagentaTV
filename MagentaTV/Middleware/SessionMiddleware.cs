@@ -1,4 +1,5 @@
 ﻿using MagentaTV.Services.Session;
+using MagentaTV.Extensions;
 
 namespace MagentaTV.Middleware;
 
@@ -19,7 +20,7 @@ public class SessionMiddleware
     public async Task InvokeAsync(HttpContext context, ISessionManager sessionManager)
     {
         // Získáme session ID z requestu
-        var sessionId = GetSessionId(context);
+        var sessionId = SessionCookieHelper.GetSessionId(context.Request);
 
         if (!string.IsNullOrEmpty(sessionId))
         {
@@ -44,7 +45,7 @@ public class SessionMiddleware
                 else
                 {
                     // Neplatná session - odstraníme cookie
-                    context.Response.Cookies.Delete("SessionId");
+                    SessionCookieHelper.RemoveSessionCookie(context.Response);
                     _logger.LogDebug("Invalid session removed: {SessionId}", sessionId);
                 }
             }
@@ -55,23 +56,5 @@ public class SessionMiddleware
         }
 
         await _next(context);
-    }
-
-    private string? GetSessionId(HttpContext context)
-    {
-        // Zkusíme cookie
-        if (context.Request.Cookies.TryGetValue("SessionId", out var cookieValue))
-        {
-            return cookieValue;
-        }
-
-        // Zkusíme Authorization header
-        var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
-        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Session "))
-        {
-            return authHeader.Substring("Session ".Length);
-        }
-
-        return null;
     }
 }

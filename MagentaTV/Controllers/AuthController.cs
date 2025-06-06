@@ -3,6 +3,7 @@ using MagentaTV.Models;
 using MagentaTV.Models.Session;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using MagentaTV.Extensions;
 
 namespace MagentaTV.Controllers
 {
@@ -52,7 +53,7 @@ namespace MagentaTV.Controllers
 
             if (result.Success && result.Data != null)
             {
-                SetSessionCookie(result.Data.SessionId);
+                SessionCookieHelper.SetSessionCookie(Response, result.Data.SessionId, true);
                 return Ok(result);
             }
 
@@ -68,57 +69,18 @@ namespace MagentaTV.Controllers
         [ProducesResponseType(typeof(ApiResponse<string>), 200)]
         public async Task<IActionResult> Logout()
         {
-            var sessionId = GetSessionIdFromRequest();
+            var sessionId = SessionCookieHelper.GetSessionId(Request);
             var command = new LogoutCommand { SessionId = sessionId };
             var result = await _mediator.Send(command);
 
             if (result.Success)
             {
-                RemoveSessionCookie();
+                SessionCookieHelper.RemoveSessionCookie(Response);
             }
 
             return Ok(result);
         }
 
-        #region Cookie Helper Methods
-
-        private string? GetSessionIdFromRequest()
-        {
-            // Cookie má prioritu
-            if (Request.Cookies.TryGetValue("SessionId", out var cookieValue))
-            {
-                return cookieValue;
-            }
-
-            // Fallback na Authorization header
-            var authHeader = Request.Headers.Authorization.FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Session "))
-            {
-                return authHeader.Substring("Session ".Length);
-            }
-
-            return null;
-        }
-
-        private void SetSessionCookie(string sessionId)
-        {
-            var cookieOptions = new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true, // HTTPS only v produkci  
-                SameSite = SameSiteMode.Strict,
-                Path = "/",
-                Expires = DateTimeOffset.UtcNow.AddDays(30) // Cookie expiruje později než session
-            };
-
-            Response.Cookies.Append("SessionId", sessionId, cookieOptions);
-        }
-
-        private void RemoveSessionCookie()
-        {
-            Response.Cookies.Delete("SessionId");
-        }
-
-        #endregion
+        
     }
 }
