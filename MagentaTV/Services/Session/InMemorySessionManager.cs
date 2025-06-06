@@ -1,5 +1,4 @@
-﻿// MagentaTV/Services/Session/InMemorySessionManager.cs (Updated)
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using MagentaTV.Configuration;
 using MagentaTV.Models.Session;
 using MagentaTV.Services.TokenStorage;

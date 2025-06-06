@@ -21,68 +21,6 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
-    /// Přihlášení uživatele - vytvoří session + tokeny se automaticky ukládají
-    /// </summary>
-    [HttpPost("login")]
-    [ProducesResponseType(typeof(ApiResponse<string>), 200)]
-    [ProducesResponseType(typeof(ApiResponse<string>), 401)]
-    public async Task<IActionResult> Login([FromBody] LoginDto login)
-    {
-        if (!ModelState.IsValid)
-        {
-            var errors = ModelState.Values
-                .SelectMany(v => v.Errors)
-                .Select(e => e.ErrorMessage)
-                .ToList();
-
-            return BadRequest(ApiResponse<string>.ErrorResult("Validation failed", errors));
-        }
-
-        var command = new LoginCommand
-        {
-            Username = login.Username,
-            Password = login.Password,
-            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            UserAgent = HttpContext.Request.Headers.UserAgent.ToString()
-        };
-
-        var result = await _mediator.Send(command);
-
-        if (result.Success)
-        {
-            // Získáme session ID z response dat
-            // Předpokládáme, že handler vrátí session ID v Data
-            var sessionId = result.Data;
-            if (!string.IsNullOrEmpty(sessionId))
-            {
-                SetSessionCookie(sessionId);
-            }
-            return Ok(result);
-        }
-
-        return Unauthorized(result);
-    }
-
-    /// <summary>
-    /// Odhlášení uživatele - ukončí session + vymaže tokeny
-    /// </summary>
-    [HttpPost("logout")]
-    [ProducesResponseType(typeof(ApiResponse<string>), 200)]
-    public async Task<IActionResult> Logout()
-    {
-        var sessionId = GetSessionIdFromRequest();
-        var command = new LogoutCommand { SessionId = sessionId };
-        var result = await _mediator.Send(command);
-
-        if (result.Success)
-        {
-            RemoveSessionCookie();
-        }
-
-        return Ok(result);
-    }
-
-    /// <summary>
     /// Získání stavu autentizace - kombinuje session + token data
     /// </summary>
     [HttpGet("auth/status")]
