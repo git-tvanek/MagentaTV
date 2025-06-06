@@ -14,6 +14,7 @@ using MediatR;
 using MagentaTV.Services.Background;
 using MagentaTV.Hubs;
 using MagentaTV.Services.Network;
+using MagentaTV.Services.Cache;
 
 var builder = WebApplication.CreateBuilder(args);
 
