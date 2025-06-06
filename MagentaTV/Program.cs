@@ -58,6 +58,7 @@ builder.Services.AddMediatRWithBehaviors();
 
 // Memory cache
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ICacheService, CacheService>();
 
 // Network configuration and service
 builder.Services.Configure<NetworkOptions>(
