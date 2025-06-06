@@ -13,7 +13,7 @@ public interface IMagenta
     /// <summary>
     /// Odhlášení uživatele a vymazání tokenů
     /// </summary>
-    Task LogoutAsync();
+    Task LogoutAsync(string sessionId);
 
     /// <summary>
     /// Získání seznamu kanálů

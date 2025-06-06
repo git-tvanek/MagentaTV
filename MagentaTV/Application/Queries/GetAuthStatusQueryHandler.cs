@@ -26,7 +26,11 @@ namespace MagentaTV.Application.Queries
             try
             {
                 var currentSession = _httpContextAccessor.HttpContext?.GetCurrentSession();
-                var tokens = await _tokenStorage.LoadTokensAsync();
+                TokenData? tokens = null;
+                if (currentSession != null)
+                {
+                    tokens = await _tokenStorage.LoadTokensAsync(currentSession.SessionId);
+                }
 
                 var status = new AuthStatusDto
                 {

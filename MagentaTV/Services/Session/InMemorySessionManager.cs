@@ -71,7 +71,7 @@ public class InMemorySessionManager : ISessionManager, IDisposable
             // Zkusíme načíst existující tokeny z TokenStorage
             try
             {
-                var tokens = await _tokenStorage.LoadTokensAsync();
+                var tokens = await _tokenStorage.LoadTokensAsync(sessionId);
                 if (tokens?.IsValid == true && tokens.Username == request.Username)
                 {
                     sessionData.Tokens = tokens;
@@ -162,17 +162,15 @@ public class InMemorySessionManager : ISessionManager, IDisposable
             var remainingSessions = await GetUserSessionsAsync(session.Username);
             var activeSessions = remainingSessions.Where(s => s.IsActive && s.SessionId != sessionId).ToList();
 
-            if (!activeSessions.Any())
+            // Always clear tokens associated with this session
+            try
             {
-                try
-                {
-                    await _tokenStorage.ClearTokensAsync();
-                    _logger.LogDebug("Cleared tokens for user {Username} - no more active sessions", session.Username);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to clear tokens for user {Username}", session.Username);
-                }
+                await _tokenStorage.ClearTokensAsync(sessionId);
+                _logger.LogDebug("Cleared tokens for session {SessionId}", sessionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to clear tokens for session {SessionId}", sessionId);
             }
 
             _logger.LogInformation("Session removed: {SessionId} for user {Username}",
@@ -189,19 +187,17 @@ public class InMemorySessionManager : ISessionManager, IDisposable
         {
             if (_sessions.TryRemove(session.SessionId, out _))
             {
+                try
+                {
+                    await _tokenStorage.ClearTokensAsync(session.SessionId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to clear tokens for session {SessionId}", session.SessionId);
+                }
+
                 removedCount++;
             }
-        }
-
-        // Vymažeme i tokeny
-        try
-        {
-            await _tokenStorage.ClearTokensAsync();
-            _logger.LogDebug("Cleared tokens for user {Username}", username);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to clear tokens for user {Username}", username);
         }
 
         _logger.LogInformation("Removed {Count} sessions for user {Username}", removedCount, username);
@@ -398,7 +394,7 @@ public class InMemorySessionManager : ISessionManager, IDisposable
             try
             {
                 // Načteme nejnovější tokeny z storage (možná byly mezitím obnoveny)
-                var latestTokens = await _tokenStorage.LoadTokensAsync();
+                var latestTokens = await _tokenStorage.LoadTokensAsync(session.SessionId);
                 if (latestTokens?.IsValid == true && latestTokens.ExpiresAt > session.Tokens.ExpiresAt)
                 {
                     session.Tokens = latestTokens;

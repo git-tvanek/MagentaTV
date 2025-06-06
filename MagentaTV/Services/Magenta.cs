@@ -141,7 +141,7 @@ namespace MagentaTV.Services
             }
         }
 
-        public async Task LogoutAsync()
+        public async Task LogoutAsync(string sessionId)
         {
             try
             {
@@ -153,7 +153,7 @@ namespace MagentaTV.Services
                 _tokenExpiry = DateTime.MinValue;
 
                 // Clear tokens from storage
-                await _tokenStorage.ClearTokensAsync();
+                await _tokenStorage.ClearTokensAsync(sessionId);
 
                 _logger.LogInformation("Logout completed successfully");
             }

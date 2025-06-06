@@ -1,4 +1,6 @@
 ﻿// MagentaTV/Services/TokenStorage/InMemoryTokenStorage.cs
+using System.Collections.Concurrent;
+
 namespace MagentaTV.Services.TokenStorage;
 
 /// <summary>
@@ -7,9 +9,10 @@ namespace MagentaTV.Services.TokenStorage;
 /// </summary>
 public class InMemoryTokenStorage : ITokenStorage
 {
-    private TokenData? _tokens;
+    private readonly ConcurrentDictionary<string, TokenData> _tokens = new();
     private readonly ILogger<InMemoryTokenStorage> _logger;
     private readonly object _lock = new();
+    private const string DefaultSessionId = "default";
 
     public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger)
     {
@@ -18,15 +21,20 @@ public class InMemoryTokenStorage : ITokenStorage
     }
 
     /// <summary>
-    /// Uloží tokeny do paměti
+    /// Uloží tokeny do paměti (výchozí session)
     /// </summary>
-    public Task SaveTokensAsync(TokenData tokens)
+    public Task SaveTokensAsync(TokenData tokens) => SaveTokensAsync(DefaultSessionId, tokens);
+
+    /// <summary>
+    /// Uloží tokeny do paměti pro danou session
+    /// </summary>
+    public Task SaveTokensAsync(string sessionId, TokenData tokens)
     {
         lock (_lock)
         {
-            _tokens = tokens;
-            _logger.LogDebug("Tokens saved in memory for user: {Username}, expires: {ExpiresAt}",
-                tokens.Username, tokens.ExpiresAt);
+            _tokens[sessionId] = tokens;
+            _logger.LogDebug("Tokens saved in memory for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
+                sessionId, tokens.Username, tokens.ExpiresAt);
         }
         return Task.CompletedTask;
     }
@@ -34,34 +42,36 @@ public class InMemoryTokenStorage : ITokenStorage
     /// <summary>
     /// Načte tokeny z paměti
     /// </summary>
-    public Task<TokenData?> LoadTokensAsync()
+    public Task<TokenData?> LoadTokensAsync() => LoadTokensAsync(DefaultSessionId);
+
+    public Task<TokenData?> LoadTokensAsync(string sessionId)
     {
         lock (_lock)
         {
-            if (_tokens != null)
+            if (_tokens.TryGetValue(sessionId, out var data))
             {
-                _logger.LogDebug("Loading tokens from memory for user: {Username}, valid: {IsValid}",
-                    _tokens.Username, _tokens.IsValid);
-            }
-            else
-            {
-                _logger.LogDebug("No tokens found in memory");
+                _logger.LogDebug("Loading tokens from memory for session {SessionId}, user: {Username}, valid: {IsValid}",
+                    sessionId, data.Username, data.IsValid);
+                return Task.FromResult<TokenData?>(data);
             }
 
-            return Task.FromResult(_tokens);
+            _logger.LogDebug("No tokens found in memory for session {SessionId}", sessionId);
+            return Task.FromResult<TokenData?>(null);
         }
     }
 
     /// <summary>
     /// Vymaže tokeny z paměti
     /// </summary>
-    public Task ClearTokensAsync()
+    public Task ClearTokensAsync() => ClearTokensAsync(DefaultSessionId);
+
+    public Task ClearTokensAsync(string sessionId)
     {
         lock (_lock)
         {
-            var username = _tokens?.Username;
-            _tokens = null;
-            _logger.LogDebug("Tokens cleared from memory for user: {Username}", username);
+            _tokens.TryRemove(sessionId, out var removed);
+            var username = removed?.Username;
+            _logger.LogDebug("Tokens cleared from memory for session {SessionId}, user: {Username}", sessionId, username);
         }
         return Task.CompletedTask;
     }
@@ -69,12 +79,14 @@ public class InMemoryTokenStorage : ITokenStorage
     /// <summary>
     /// Zkontroluje, jestli jsou v paměti platné tokeny
     /// </summary>
-    public Task<bool> HasValidTokensAsync()
+    public Task<bool> HasValidTokensAsync() => HasValidTokensAsync(DefaultSessionId);
+
+    public Task<bool> HasValidTokensAsync(string sessionId)
     {
         lock (_lock)
         {
-            var hasValid = _tokens?.IsValid == true;
-            _logger.LogDebug("HasValidTokens check: {HasValid}", hasValid);
+            var hasValid = _tokens.TryGetValue(sessionId, out var data) && data.IsValid;
+            _logger.LogDebug("HasValidTokens check for {SessionId}: {HasValid}", sessionId, hasValid);
             return Task.FromResult(hasValid);
         }
     }
@@ -82,17 +94,18 @@ public class InMemoryTokenStorage : ITokenStorage
     /// <summary>
     /// Získá informace o současném stavu tokenů (pro debugging)
     /// </summary>
-    public TokenStatus GetTokenStatus()
+    public TokenStatus GetTokenStatus(string sessionId = DefaultSessionId)
     {
         lock (_lock)
         {
+            _tokens.TryGetValue(sessionId, out var data);
             return new TokenStatus
             {
-                HasTokens = _tokens != null,
-                IsValid = _tokens?.IsValid ?? false,
-                Username = _tokens?.Username,
-                ExpiresAt = _tokens?.ExpiresAt,
-                TimeToExpiry = _tokens?.TimeToExpiry
+                HasTokens = data != null,
+                IsValid = data?.IsValid ?? false,
+                Username = data?.Username,
+                ExpiresAt = data?.ExpiresAt,
+                TimeToExpiry = data?.TimeToExpiry
             };
         }
     }
