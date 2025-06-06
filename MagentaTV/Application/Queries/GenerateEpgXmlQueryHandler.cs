@@ -1,16 +1,16 @@
-﻿using MagentaTV.Services;
+using MagentaTV.Services.Epg;
 using MediatR;
 
 namespace MagentaTV.Application.Queries
 {
     public class GenerateEpgXmlQueryHandler : IRequestHandler<GenerateEpgXmlQuery, string>
     {
-        private readonly IMagenta _magentaService;
+        private readonly IEpgService _epgService;
         private readonly ILogger<GenerateEpgXmlQueryHandler> _logger;
 
-        public GenerateEpgXmlQueryHandler(IMagenta magentaService, ILogger<GenerateEpgXmlQueryHandler> logger)
+        public GenerateEpgXmlQueryHandler(IEpgService epgService, ILogger<GenerateEpgXmlQueryHandler> logger)
         {
-            _magentaService = magentaService;
+            _epgService = epgService;
             _logger = logger;
         }
 
@@ -18,8 +18,8 @@ namespace MagentaTV.Application.Queries
         {
             try
             {
-                var epg = await _magentaService.GetEpgAsync(request.ChannelId);
-                return _magentaService.GenerateXmlTv(epg, request.ChannelId);
+                var epg = await _epgService.GetEpgAsync(request.ChannelId);
+                return _epgService.GenerateXmlTv(epg, request.ChannelId);
             }
             catch (Exception ex)
             {

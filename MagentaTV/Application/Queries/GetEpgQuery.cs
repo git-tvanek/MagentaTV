@@ -1,5 +1,5 @@
 ﻿using MagentaTV.Models;
-using MagentaTV.Services;
+using MagentaTV.Services.Epg;
 using MediatR;
 
 namespace MagentaTV.Application.Queries
@@ -14,12 +14,12 @@ namespace MagentaTV.Application.Queries
 
     public class GetEpgQueryHandler : IRequestHandler<GetEpgQuery, ApiResponse<List<EpgItemDto>>>
     {
-        private readonly IMagenta _magentaService;
+        private readonly IEpgService _epgService;
         private readonly ILogger<GetEpgQueryHandler> _logger;
 
-        public GetEpgQueryHandler(IMagenta magentaService, ILogger<GetEpgQueryHandler> logger)
+        public GetEpgQueryHandler(IEpgService epgService, ILogger<GetEpgQueryHandler> logger)
         {
-            _magentaService = magentaService;
+            _epgService = epgService;
             _logger = logger;
         }
 
@@ -27,7 +27,7 @@ namespace MagentaTV.Application.Queries
         {
             try
             {
-                var epg = await _magentaService.GetEpgAsync(request.ChannelId, request.From, request.To);
+                var epg = await _epgService.GetEpgAsync(request.ChannelId, request.From, request.To);
                 return ApiResponse<List<EpgItemDto>>.SuccessResult(epg, $"Found {epg.Count} EPG items");
             }
             catch (Exception ex)
