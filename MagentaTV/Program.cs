@@ -18,6 +18,7 @@ using MagentaTV.Services.Background;
 using MagentaTV.Hubs;
 using MagentaTV.Services.Network;
 using MagentaTV.Services.Cache;
+using MagentaTV.Services.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -96,6 +97,9 @@ builder.Services.Configure<TelemetryOptions>(
 // Validate configuration
 builder.Services.AddSingleton<IValidateOptions<MagentaTV.Configuration.SessionOptions>, ValidateSessionOptions>();
 builder.Services.AddSingleton<IValidateOptions<TokenStorageOptions>, ValidateTokenStorageOptions>();
+
+// Configuration service
+builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();
 
 // Register main services
 builder.Services.AddScoped<IMagenta, Magenta>();
