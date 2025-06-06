@@ -176,16 +176,16 @@ namespace MagentaTV.Services.Background.Services
         /// <summary>
         /// Adds cache-warming specific metrics to the service health report.
         /// </summary>
-        public override Task<ServiceHealth> GetHealthAsync()
+        public override async Task<ServiceHealth> GetHealthAsync()
         {
-            var baseHealth = base.GetHealthAsync().Result;
+            var baseHealth = await base.GetHealthAsync();
 
             // Přidáme cache warming specific metriky
             baseHealth.Metrics["has_warmed_after_login"] = _hasWarmedAfterLogin;
             baseHealth.Metrics["last_successful_warm"] = _lastSuccessfulWarm;
             baseHealth.Metrics["time_since_last_warm"] = DateTime.UtcNow - _lastSuccessfulWarm;
 
-            return Task.FromResult(baseHealth);
+            return baseHealth;
         }
     }
 }

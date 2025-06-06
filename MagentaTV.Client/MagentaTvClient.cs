@@ -116,7 +116,7 @@ public class MagentaTvClient
         var completed = await Task.WhenAny(receiveTask, Task.Delay(timeoutMs));
         if (completed == receiveTask)
         {
-            var result = receiveTask.Result;
+            var result = await receiveTask;
             var message = Encoding.UTF8.GetString(result.Buffer);
             const string prefix = "MAGENTATV_DISCOVERY_RESPONSE|";
             if (message.StartsWith(prefix))
