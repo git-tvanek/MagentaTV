@@ -14,13 +14,13 @@ public class InMemorySessionManager : ISessionManager, IDisposable
 {
     private readonly ConcurrentDictionary<string, SessionData> _sessions = new();
     private readonly ILogger<InMemorySessionManager> _logger;
-    private readonly Configuration.SessionOptions _options;
+    private readonly MagentaTV.Configuration.SessionOptions _options;
     private readonly ITokenStorage _tokenStorage;
     private readonly Timer _cleanupTimer;
 
     public InMemorySessionManager(
         ILogger<InMemorySessionManager> logger,
-        IOptions<Configuration.SessionOptions> options,
+        IOptions<MagentaTV.Configuration.SessionOptions> options,
         ITokenStorage tokenStorage)
     {
         _logger = logger;
