@@ -21,6 +21,7 @@ using MagentaTV.Hubs;
 using MagentaTV.Services.Network;
 using MagentaTV.Services.Cache;
 using MagentaTV.Services.Configuration;
+using MagentaTV.Services.Ffmpeg;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +43,7 @@ builder.Services.AddSingleton<ITelemetryService>(provider =>
 builder.Services.AddTransient<INotificationHandler<UserLoggedInEvent>, UserLoggedInEventHandler>();
 builder.Services.AddTransient<INotificationHandler<TokensRefreshedEvent>, TokensRefreshedEventHandler>();
 builder.Services.AddTransient<INotificationHandler<UserLoggedOutEvent>, UserLoggedOutEventHandler>();
+builder.Services.AddTransient<INotificationHandler<FfmpegJobCompletedEvent>, FfmpegJobCompletedEventHandler>();
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -66,6 +68,7 @@ builder.Services.AddMediatRWithBehaviors();
 // Memory cache
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ICacheService, CacheService>();
+builder.Services.AddFfmpeg(builder.Configuration);
 
 // Network configuration and service
 builder.Services.Configure<NetworkOptions>(
