@@ -5,12 +5,13 @@ using System.Text;
 using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using MagentaTV.Configuration;
 
 namespace MagentaTV.Services.Network;
 
-public class NetworkService : INetworkService
+public class NetworkService : INetworkService, IHostedService
 {
     private readonly NetworkOptions _options;
     private readonly ILogger<NetworkService> _logger;
@@ -131,5 +132,15 @@ public class NetworkService : INetworkService
         }
 
         return handler;
+    }
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        return ConfigureNetworkAsync(cancellationToken);
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
     }
 }
