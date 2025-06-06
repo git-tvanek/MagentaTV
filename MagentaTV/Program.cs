@@ -190,6 +190,10 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// Legacy route redirects for removed session endpoints
+app.MapPost("/sessions/create", () => Results.Redirect("/auth/login", permanent: true, preserveMethod: true));
+app.MapPost("/sessions/logout", () => Results.Redirect("/auth/logout", permanent: true, preserveMethod: true));
+
 // Health checks endpoint
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {

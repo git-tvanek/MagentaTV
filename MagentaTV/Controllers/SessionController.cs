@@ -21,44 +21,6 @@ public class SessionController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>
-    /// Vytvoří novou session (přihlášení)
-    /// </summary>
-    [HttpPost("create")]
-    [ProducesResponseType(typeof(ApiResponse<SessionCreatedDto>), 200)]
-    [ProducesResponseType(typeof(ApiResponse<string>), 400)]
-    [ProducesResponseType(typeof(ApiResponse<string>), 401)]
-    public async Task<IActionResult> CreateSession([FromBody] CreateSessionRequest request)
-    {
-        if (!ModelState.IsValid)
-        {
-            var errors = ModelState.Values
-                .SelectMany(v => v.Errors)
-                .Select(e => e.ErrorMessage)
-                .ToList();
-            return BadRequest(ApiResponse<string>.ErrorResult("Validation failed", errors));
-        }
-
-        var command = new CreateSessionCommand
-        {
-            Request = request,
-            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            UserAgent = HttpContext.Request.Headers.UserAgent.ToString()
-        };
-
-        var result = await _mediator.Send(command);
-
-        if (result.Success)
-        {
-            // Nastavíme session cookie
-            SetSessionCookie(result.Data!.SessionId);
-            return Ok(result);
-        }
-
-        return result.Message?.Contains("Invalid credentials") == true
-            ? Unauthorized(result)
-            : StatusCode(500, result);
-    }
 
     /// <summary>
     /// Získá informace o current session
@@ -111,24 +73,6 @@ public class SessionController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Ukončí current session (odhlášení)
-    /// </summary>
-    [HttpPost("logout")]
-    [ProducesResponseType(typeof(ApiResponse<string>), 200)]
-    public async Task<IActionResult> Logout()
-    {
-        var sessionId = GetSessionIdFromRequest();
-        var command = new SessionLogoutCommand { SessionId = sessionId };
-        var result = await _mediator.Send(command);
-
-        if (result.Success)
-        {
-            RemoveSessionCookie();
-        }
-
-        return Ok(result);
-    }
 
     /// <summary>
     /// Ukončí konkrétní session
@@ -166,7 +110,6 @@ public class SessionController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
     /// Ukončí všechny sessions uživatele kromě současné
     /// </summary>
     [HttpPost("logout-all")]
