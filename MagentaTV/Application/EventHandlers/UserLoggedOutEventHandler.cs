@@ -1,6 +1,8 @@
 ﻿// Application/EventHandlers/UserLoggedOutEventHandler.cs
 using MagentaTV.Application.Events;
 using MagentaTV.Services.Background;
+using MagentaTV.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Session;
 using MagentaTV.Services.TokenStorage;
@@ -15,17 +17,20 @@ namespace MagentaTV.Application.EventHandlers
         private readonly ISessionManager _sessionManager;
         private readonly ITokenStorage _tokenStorage;
         private readonly ILogger<UserLoggedOutEventHandler> _logger;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
         public UserLoggedOutEventHandler(
             IBackgroundServiceManager backgroundManager,
             ISessionManager sessionManager,
             ITokenStorage tokenStorage,
-            ILogger<UserLoggedOutEventHandler> logger)
+            ILogger<UserLoggedOutEventHandler> logger,
+            IHubContext<NotificationHub> hubContext)
         {
             _backgroundManager = backgroundManager;
             _sessionManager = sessionManager;
             _tokenStorage = tokenStorage;
             _logger = logger;
+            _hubContext = hubContext;
         }
 
         public async Task Handle(UserLoggedOutEvent notification, CancellationToken cancellationToken)
@@ -56,6 +61,8 @@ namespace MagentaTV.Application.EventHandlers
                 // Queue retry work item for critical cleanup
                 await QueueRetryCleanupAsync(notification, ex.Message);
             }
+
+            await _hubContext.Clients.All.SendAsync("UserLoggedOut", notification, cancellationToken);
         }
 
         /// <summary>

@@ -1,4 +1,6 @@
 ﻿using MagentaTV.Application.Events;
+using MagentaTV.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using MagentaTV.Models;
 using MagentaTV.Services.Background;
 using MagentaTV.Services.Channels;
@@ -14,13 +16,16 @@ namespace MagentaTV.Application.EventHandlers
     {
         private readonly IBackgroundServiceManager _backgroundManager;
         private readonly ILogger<UserLoggedInEventHandler> _logger;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
         public UserLoggedInEventHandler(
             IBackgroundServiceManager backgroundManager,
-            ILogger<UserLoggedInEventHandler> logger)
+            ILogger<UserLoggedInEventHandler> logger,
+            IHubContext<NotificationHub> hubContext)
         {
             _backgroundManager = backgroundManager;
             _logger = logger;
+            _hubContext = hubContext;
         }
 
         public async Task Handle(UserLoggedInEvent notification, CancellationToken cancellationToken)
@@ -48,6 +53,8 @@ namespace MagentaTV.Application.EventHandlers
                 _logger.LogError(ex, "Failed to queue post-login tasks for user {Username}", notification.Username);
                 // Nebudeme házet exception - login už proběhl úspěšně
             }
+
+            await _hubContext.Clients.All.SendAsync("UserLoggedIn", notification, cancellationToken);
         }
 
         /// <summary>
