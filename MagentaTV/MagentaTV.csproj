@@ -22,7 +22,6 @@
                 <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="8.1.4" />
                 <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="8.1.4" />
                 <PackageReference Include="System.Threading.RateLimiting" Version="9.0.5" />
-                <FrameworkReference Include="Microsoft.AspNetCore.App" />
         </ItemGroup>
 
 	<ItemGroup>
