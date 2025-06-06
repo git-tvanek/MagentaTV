@@ -1,4 +1,4 @@
-﻿using MagentaTV.Application.Commands;
+using MagentaTV.Application.Commands;
 using MagentaTV.Application.Queries;
 using MagentaTV.Extensions;
 using MagentaTV.Models;
@@ -9,6 +9,10 @@ namespace MagentaTV.Controllers;
 
 [ApiController]
 [Route("magenta")]
+/// <summary>
+/// API endpoints that act as a thin wrapper over the underlying MagentaTV
+/// service. Requires an active session for most operations.
+/// </summary>
 public class MagentaController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -21,7 +25,8 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
-    /// Získání stavu autentizace - kombinuje session + token data
+    /// Returns authentication status by combining current session details and
+    /// stored token information.
     /// </summary>
     [HttpGet("auth/status")]
     [ProducesResponseType(typeof(ApiResponse<AuthStatusDto>), 200)]
@@ -33,7 +38,7 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
-    /// Získání seznamu kanálů - vyžaduje aktivní session
+    /// Retrieves the list of available channels. Requires an active session.
     /// </summary>
     [HttpGet("channels")]
     [ProducesResponseType(typeof(ApiResponse<List<ChannelDto>>), 200)]
@@ -55,7 +60,8 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
-    /// Získání EPG pro kanál - vyžaduje aktivní session
+    /// Returns the Electronic Program Guide for the specified channel. Requires
+    /// an active session.
     /// </summary>
     [HttpGet("epg/{channelId}")]
     [ProducesResponseType(typeof(ApiResponse<List<EpgItemDto>>), 200)]
@@ -88,7 +94,8 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
-    /// Získání stream URL pro kanál - vyžaduje aktivní session
+    /// Retrieves the streaming URL for the given channel. An active session is
+    /// required to access the stream.
     /// </summary>
     [HttpGet("stream/{channelId}")]
     [ProducesResponseType(typeof(ApiResponse<StreamUrlDto>), 200)]
@@ -122,7 +129,8 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
-    /// Získání catchup stream URL - vyžaduje aktivní session
+    /// Retrieves the catch-up streaming URL for the specified schedule entry.
+    /// Requires an active session.
     /// </summary>
     [HttpGet("catchup/{scheduleId}")]
     [ProducesResponseType(typeof(ApiResponse<StreamUrlDto>), 200)]
@@ -156,7 +164,8 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
-    /// Generování M3U playlistu - vyžaduje aktivní session
+    /// Generates an M3U playlist for the authenticated user. Requires an active
+    /// session to obtain channel data and streaming URLs.
     /// </summary>
     [HttpGet("playlist")]
     [ProducesResponseType(typeof(FileResult), 200)]
@@ -185,7 +194,8 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
-    /// Export EPG ve formátu XMLTV - vyžaduje aktivní session
+    /// Exports the EPG for a channel as an XMLTV document. Requires an active
+    /// session.
     /// </summary>
     [HttpGet("epgxml/{channelId}")]
     [ProducesResponseType(typeof(FileResult), 200)]
@@ -221,7 +231,8 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
-    /// Ověření připojení k MagentaTV API - kombinuje session + token info
+    /// Performs a connectivity check against the MagentaTV API and returns
+    /// information about the current session and token validity.
     /// </summary>
     [HttpGet("ping")]
     [ProducesResponseType(typeof(ApiResponse<PingResultDto>), 200)]

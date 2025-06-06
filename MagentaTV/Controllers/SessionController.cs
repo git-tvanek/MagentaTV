@@ -1,4 +1,4 @@
-﻿using MagentaTV.Application.Commands;
+using MagentaTV.Application.Commands;
 using MagentaTV.Application.Queries;
 using MagentaTV.Models;
 using MagentaTV.Models.Session;
@@ -11,6 +11,11 @@ namespace MagentaTV.Controllers;
 
 [ApiController]
 [Route("sessions")]
+/// <summary>
+/// Provides endpoints for inspecting and manipulating user sessions. These
+/// endpoints require a valid session cookie and are primarily used for
+/// session management in the UI.
+/// </summary>
 public class SessionController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -24,7 +29,7 @@ public class SessionController : ControllerBase
 
 
     /// <summary>
-    /// Získá informace o current session
+    /// Returns details for the currently active session.
     /// </summary>
     [HttpGet("current")]
     [ProducesResponseType(typeof(ApiResponse<SessionInfoDto>), 200)]
@@ -50,7 +55,7 @@ public class SessionController : ControllerBase
     }
 
     /// <summary>
-    /// Získá všechny sessions současného uživatele
+    /// Retrieves a list of all sessions associated with the current user.
     /// </summary>
     [HttpGet("user")]
     [ProducesResponseType(typeof(ApiResponse<List<SessionDto>>), 200)]
@@ -76,7 +81,7 @@ public class SessionController : ControllerBase
 
 
     /// <summary>
-    /// Ukončí konkrétní session
+    /// Revokes a specific session identified by <paramref name="sessionId"/>.
     /// </summary>
     [HttpPost("revoke/{sessionId}")]
     [ProducesResponseType(typeof(ApiResponse<string>), 200)]
@@ -111,7 +116,9 @@ public class SessionController : ControllerBase
         return Ok(result);
     }
 
-    /// Ukončí všechny sessions uživatele kromě současné
+    /// <summary>
+    /// Logs out every session for the current user except the one making the
+    /// request.
     /// </summary>
     [HttpPost("logout-all")]
     [ProducesResponseType(typeof(ApiResponse<string>), 200)]
@@ -136,7 +143,7 @@ public class SessionController : ControllerBase
     }
 
     /// <summary>
-    /// Získá statistiky sessions (admin endpoint)
+    /// Retrieves aggregated session statistics. Intended for administrative use.
     /// </summary>
     [HttpGet("statistics")]
     [ProducesResponseType(typeof(ApiResponse<SessionStatistics>), 200)]

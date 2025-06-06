@@ -1,4 +1,4 @@
-﻿using MagentaTV.Services.Background.Core;
+using MagentaTV.Services.Background.Core;
 using MagentaTV.Services.Background.Events;
 using MagentaTV.Services.TokenStorage;
 using MagentaTV.Services.Channels;
@@ -6,6 +6,12 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace MagentaTV.Services.Background.Services
 {
+    /// <summary>
+    /// Periodically preloads channel data into the in-memory cache so that
+    /// the first user requests are served faster. The service runs in the
+    /// background and intelligently decides when to perform the warming based
+    /// on token availability and previous success.
+    /// </summary>
     public class CacheWarmingService : BaseBackgroundService, ICacheWarmingService
     {
         private bool _hasWarmedAfterLogin = false;
@@ -108,7 +114,9 @@ namespace MagentaTV.Services.Background.Services
 
 
         /// <summary>
-        /// Manuální trigger pro cache warming (voláno z event handlerů)
+        /// Allows other components to explicitly request a cache warm-up. This
+        /// is typically invoked from event handlers when new tokens become
+        /// available.
         /// </summary>
         public async Task TriggerWarmingAsync()
         {
@@ -134,38 +142,39 @@ namespace MagentaTV.Services.Background.Services
         }
 
         /// <summary>
-        /// Zkontroluje jestli je cache už naplněná
+        /// Checks whether the channel data are already present in the cache.
         /// </summary>
         private bool IsCacheAlreadyWarmed(IMemoryCache cache)
         {
-            // Zkontrolujeme jestli jsou v cache kanály
+            // Look for the cached channel list entry
             return cache.TryGetValue("channels", out _);
         }
 
         /// <summary>
-        /// Dynamický interval na základě úspěchu posledního warming
+        /// Calculates the next execution interval based on the success of the
+        /// previous cache warming attempt.
         /// </summary>
         private double GetDynamicInterval()
         {
-            // Pokud se warming nikdy nepovedl, zkusíme častěji
+            // If warming has never succeeded run more frequently
             if (_lastSuccessfulWarm == DateTime.MinValue)
             {
                 return 0.5; // 30 minut
             }
 
-            // Pokud byl poslední warming úspěšný a nedávno, můžeme čekat déle
+            // When the last run succeeded recently we can wait longer
             var timeSinceLastWarm = DateTime.UtcNow - _lastSuccessfulWarm;
             if (timeSinceLastWarm < TimeSpan.FromHours(2))
             {
                 return 4; // 4 hodiny
             }
 
-            // Standardní interval
+            // Default interval
             return 2; // 2 hodiny
         }
 
         /// <summary>
-        /// Přidává informace do health check
+        /// Adds cache-warming specific metrics to the service health report.
         /// </summary>
         public override Task<ServiceHealth> GetHealthAsync()
         {

@@ -1,4 +1,4 @@
-﻿using MagentaTV.Application.Commands;
+using MagentaTV.Application.Commands;
 using MagentaTV.Models;
 using MagentaTV.Models.Session;
 using MediatR;
@@ -9,6 +9,10 @@ namespace MagentaTV.Controllers
 {
     [ApiController]
     [Route("auth")]
+    /// <summary>
+    /// Handles authentication related endpoints such as logging in and out.
+    /// All responses are returned using the <see cref="ApiResponse{T}"/> wrapper.
+    /// </summary>
     public class AuthController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -21,7 +25,8 @@ namespace MagentaTV.Controllers
         }
 
         /// <summary>
-        /// Unified login endpoint - ověří credentials + vytvoří session
+        /// Central login endpoint that validates user credentials and creates
+        /// a new application session when successful.
         /// </summary>
         [HttpPost("login")]
         [ProducesResponseType(typeof(ApiResponse<SessionCreatedDto>), 200)]
@@ -63,7 +68,8 @@ namespace MagentaTV.Controllers
         }
 
         /// <summary>
-        /// Logout endpoint
+        /// Terminates the current session and removes the session cookie from
+        /// the client.
         /// </summary>
         [HttpPost("logout")]
         [ProducesResponseType(typeof(ApiResponse<string>), 200)]
