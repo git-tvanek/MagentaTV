@@ -75,7 +75,9 @@ builder.Services.AddFfmpeg(builder.Configuration);
 // Network configuration and service
 builder.Services.Configure<NetworkOptions>(
     builder.Configuration.GetSection(NetworkOptions.SectionName));
-builder.Services.AddSingleton<INetworkService, NetworkService>();
+builder.Services.AddSingleton<NetworkService>();
+builder.Services.AddSingleton<INetworkService>(sp => sp.GetRequiredService<NetworkService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<NetworkService>());
 builder.Services.Configure<DiscoveryOptions>(
     builder.Configuration.GetSection(DiscoveryOptions.SectionName));
 
@@ -204,9 +206,6 @@ AnsiConsole.Write(new Panel(infoTable)
     Padding = new Padding(1, 1, 1, 1)
 });
 
-// Apply network configuration before starting services
-var networkService = app.Services.GetRequiredService<INetworkService>();
-await networkService.ConfigureNetworkAsync();
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
