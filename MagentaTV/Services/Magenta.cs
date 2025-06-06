@@ -26,6 +26,7 @@ namespace MagentaTV.Services
         private readonly CacheOptions _cacheOptions;
         private readonly TokenStorageOptions _tokenOptions;
         private readonly ITokenStorage _tokenStorage;
+        private readonly NetworkOptions _networkOptions;
         private readonly string _devId;
 
         // Current session tokens
@@ -40,7 +41,8 @@ namespace MagentaTV.Services
             IOptions<MagentaTVOptions> options,
             IOptions<CacheOptions> cacheOptions,
             IOptions<TokenStorageOptions> tokenOptions,
-            ITokenStorage tokenStorage)
+            ITokenStorage tokenStorage,
+            IOptions<NetworkOptions> networkOptions)
         {
             _httpClient = httpClient;
             _cache = cache;
@@ -49,6 +51,7 @@ namespace MagentaTV.Services
             _cacheOptions = cacheOptions.Value;
             _tokenOptions = tokenOptions.Value;
             _tokenStorage = tokenStorage;
+            _networkOptions = networkOptions.Value;
 
             _devId = GetOrCreateDeviceId();
             ConfigureHttpClient();
@@ -561,7 +564,7 @@ namespace MagentaTV.Services
                         sb.Append($" tvg-logo=\"{ch.LogoUrl}\"");
 
                     sb.Append($",{ch.Name}\n");
-                    sb.Append($"https://localhost:3000/magenta/stream/{ch.ChannelId}\n");
+                    sb.Append($"https://{_networkOptions.IpAddress}:3000/magenta/stream/{ch.ChannelId}\n");
                 }
 
                 var result = sb.ToString();
