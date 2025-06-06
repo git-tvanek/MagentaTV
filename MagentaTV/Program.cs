@@ -219,7 +219,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
 // Exception handling middleware
-app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
 // Request/Response logging (only in development)
 if (app.Environment.IsDevelopment())

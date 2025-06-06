@@ -21,6 +21,7 @@ Tento repozitář obsahuje ASP.NET Core aplikaci poskytující REST rozhraní pr
 - **Health checks** pro kontrolu dostupnosti služeb a background úloh
 - **Barevná konzole** využívající [Spectre.Console](https://spectreconsole.net)
   pro přehledné panely a informační hlášky
+- **Pokročilé zpracování chyb** pomocí vlastního middleware, který vrací `ApiResponse` s identifikátorem chyby
 
 ## Spuštění v režimu vývoje
 ```bash
