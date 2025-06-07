@@ -1,5 +1,6 @@
 ﻿// MagentaTV/Services/TokenStorage/InMemoryTokenStorage.cs
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 
 namespace MagentaTV.Services.TokenStorage;
 
@@ -7,16 +8,17 @@ namespace MagentaTV.Services.TokenStorage;
 /// In-memory implementace token storage pro development a testing
 /// Tokeny se neukládají persistentně a zmizí po restartu aplikace
 /// </summary>
-public class InMemoryTokenStorage : ITokenStorage
+public class InMemoryTokenStorage : ITokenStorage, IDisposable
 {
     private readonly ConcurrentDictionary<string, TokenData> _tokens = new();
     private readonly ILogger<InMemoryTokenStorage> _logger;
-    private readonly object _lock = new();
+    private readonly TokenExpirationManager _expirationManager;
     private const string DefaultSessionId = "default";
 
     public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger)
     {
         _logger = logger;
+        _expirationManager = new TokenExpirationManager(_tokens, _logger);
         _logger.LogInformation("InMemoryTokenStorage initialized - tokens will not persist across restarts");
     }
 
@@ -30,12 +32,10 @@ public class InMemoryTokenStorage : ITokenStorage
     /// </summary>
     public Task SaveTokensAsync(string sessionId, TokenData tokens)
     {
-        lock (_lock)
-        {
-            _tokens[sessionId] = tokens;
-            _logger.LogDebug("Tokens saved in memory for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
-                sessionId, tokens.Username, tokens.ExpiresAt);
-        }
+        _tokens.AddOrUpdate(sessionId, tokens, (_, _) => tokens);
+        _logger.LogDebug(
+            "Tokens saved in memory for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
+            sessionId, tokens.Username, tokens.ExpiresAt);
         return Task.CompletedTask;
     }
 
@@ -46,18 +46,23 @@ public class InMemoryTokenStorage : ITokenStorage
 
     public Task<TokenData?> LoadTokensAsync(string sessionId)
     {
-        lock (_lock)
+        if (_tokens.TryGetValue(sessionId, out var data))
         {
-            if (_tokens.TryGetValue(sessionId, out var data))
+            if (data.IsExpired)
             {
-                _logger.LogDebug("Loading tokens from memory for session {SessionId}, user: {Username}, valid: {IsValid}",
-                    sessionId, data.Username, data.IsValid);
-                return Task.FromResult<TokenData?>(data);
+                _tokens.TryRemove(sessionId, out _);
+                _logger.LogDebug("Removed expired tokens for session {SessionId}", sessionId);
+                return Task.FromResult<TokenData?>(null);
             }
 
-            _logger.LogDebug("No tokens found in memory for session {SessionId}", sessionId);
-            return Task.FromResult<TokenData?>(null);
+            _logger.LogDebug(
+                "Loading tokens from memory for session {SessionId}, user: {Username}, valid: {IsValid}",
+                sessionId, data.Username, data.IsValid);
+            return Task.FromResult<TokenData?>(data);
         }
+
+        _logger.LogDebug("No tokens found in memory for session {SessionId}", sessionId);
+        return Task.FromResult<TokenData?>(null);
     }
 
     /// <summary>
@@ -67,12 +72,11 @@ public class InMemoryTokenStorage : ITokenStorage
 
     public Task ClearTokensAsync(string sessionId)
     {
-        lock (_lock)
-        {
-            _tokens.TryRemove(sessionId, out var removed);
-            var username = removed?.Username;
-            _logger.LogDebug("Tokens cleared from memory for session {SessionId}, user: {Username}", sessionId, username);
-        }
+        _tokens.TryRemove(sessionId, out var removed);
+        var username = removed?.Username;
+        _logger.LogDebug(
+            "Tokens cleared from memory for session {SessionId}, user: {Username}",
+            sessionId, username);
         return Task.CompletedTask;
     }
 
@@ -83,12 +87,9 @@ public class InMemoryTokenStorage : ITokenStorage
 
     public Task<bool> HasValidTokensAsync(string sessionId)
     {
-        lock (_lock)
-        {
-            var hasValid = _tokens.TryGetValue(sessionId, out var data) && data.IsValid;
-            _logger.LogDebug("HasValidTokens check for {SessionId}: {HasValid}", sessionId, hasValid);
-            return Task.FromResult(hasValid);
-        }
+        var hasValid = _tokens.TryGetValue(sessionId, out var data) && data.IsValid;
+        _logger.LogDebug("HasValidTokens check for {SessionId}: {HasValid}", sessionId, hasValid);
+        return Task.FromResult(hasValid);
     }
 
     /// <summary>
@@ -96,18 +97,20 @@ public class InMemoryTokenStorage : ITokenStorage
     /// </summary>
     public TokenStatus GetTokenStatus(string sessionId = DefaultSessionId)
     {
-        lock (_lock)
+        _tokens.TryGetValue(sessionId, out var data);
+        return new TokenStatus
         {
-            _tokens.TryGetValue(sessionId, out var data);
-            return new TokenStatus
-            {
-                HasTokens = data != null,
-                IsValid = data?.IsValid ?? false,
-                Username = data?.Username,
-                ExpiresAt = data?.ExpiresAt,
-                TimeToExpiry = data?.TimeToExpiry
-            };
-        }
+            HasTokens = data != null,
+            IsValid = data?.IsValid ?? false,
+            Username = data?.Username,
+            ExpiresAt = data?.ExpiresAt,
+            TimeToExpiry = data?.TimeToExpiry
+        };
+    }
+
+    public void Dispose()
+    {
+        _expirationManager.Dispose();
     }
 }
 
