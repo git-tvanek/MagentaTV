@@ -43,8 +43,14 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     /// </summary>
     public Task SaveTokensAsync(string sessionId, TokenData tokens)
     {
-        var entry = new TokenEntry(tokens);
-        _tokens.AddOrUpdate(sessionId, entry, (_, _) => entry);
+        _tokens.AddOrUpdate(sessionId,
+            _ => new TokenEntry(tokens),
+            (_, existing) =>
+            {
+                existing.Data = tokens;
+                existing.UpdateAccess();
+                return existing;
+            });
 
         _logger.LogDebug(
             "Tokens saved in memory for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
