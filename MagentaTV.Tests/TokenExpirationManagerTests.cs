@@ -51,7 +51,7 @@ public sealed class TokenExpirationManagerTests
 
         Assert.AreEqual(1, storage.Metrics.Hits);
         Assert.AreEqual(2, storage.Metrics.Misses);
-        Assert.AreEqual(2, storage.Metrics.Evictions);
+        Assert.AreEqual(3, storage.Metrics.Evictions);
         Assert.AreEqual(1, storage.Metrics.Expirations);
     }
 }

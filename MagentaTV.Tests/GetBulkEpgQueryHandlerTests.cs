@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using MagentaTV.Application.Queries;
 using MagentaTV.Models;
 using MagentaTV.Services;
+using MagentaTV.Services.TokenStorage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -30,7 +31,7 @@ public sealed class GetBulkEpgQueryHandlerTests
         public Task<string?> GetCatchupStreamUrlAsync(long scheduleId) => throw new NotImplementedException();
         public Task<string> GenerateM3UPlaylistAsync() => throw new NotImplementedException();
         public string GenerateXmlTv(List<EpgItemDto> epg, int channelId) => throw new NotImplementedException();
-        public Task<TokenData?> RefreshTokensAsync(TokenData currentTokens) => throw new NotImplementedException();
+        public Task<TokenData?> RefreshTokensAsync(TokenData currentTokens) => Task.FromResult<TokenData?>(null);
     }
 
     [TestMethod]

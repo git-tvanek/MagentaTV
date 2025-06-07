@@ -99,6 +99,15 @@ public class MagentaTvClient
                ?? new ApiResponse<StreamUrlDto> { Success = false, Message = "Invalid response" };
     }
 
+    public async Task<ApiResponse<Dictionary<int, string?>>> GetStreamUrlsBulkAsync(IEnumerable<int> channelIds)
+    {
+        var idList = string.Join(',', channelIds);
+        var response = await _httpClient.GetAsync($"magenta/stream/bulk?ids={idList}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ApiResponse<Dictionary<int, string?>>>()
+               ?? new ApiResponse<Dictionary<int, string?>> { Success = false, Message = "Invalid response" };
+    }
+
     public async Task<ApiResponse<StreamUrlDto>> GetCatchupStreamAsync(long scheduleId)
     {
         var response = await _httpClient.GetAsync($"magenta/catchup/{scheduleId}");
