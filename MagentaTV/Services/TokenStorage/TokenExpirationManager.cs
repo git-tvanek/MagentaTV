@@ -13,6 +13,7 @@ public class TokenExpirationManager : IDisposable
     private readonly ILogger<TokenExpirationManager>? _logger;
     private readonly TokenStorageMetrics? _metrics;
     private readonly Timer _timer;
+    private bool _disposed;
 
     public TokenExpirationManager(
         TokenCache cache,
@@ -42,6 +43,25 @@ public class TokenExpirationManager : IDisposable
 
     public void Dispose()
     {
-        _timer.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            _timer.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    ~TokenExpirationManager()
+    {
+        Dispose(false);
     }
 }

@@ -15,6 +15,7 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     private readonly ILogger<InMemoryTokenStorage> _logger;
     private readonly TokenExpirationManager _expirationManager;
     private readonly TokenStorageMetrics _metrics = new();
+    private bool _disposed;
     private const string DefaultSessionId = "default";
 
     public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger, IOptions<TokenStorageOptions> options)
@@ -126,7 +127,26 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
 
     public void Dispose()
     {
-        _expirationManager.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            _expirationManager.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    ~InMemoryTokenStorage()
+    {
+        Dispose(false);
     }
 }
 
