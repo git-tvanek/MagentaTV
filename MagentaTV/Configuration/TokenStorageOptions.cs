@@ -72,6 +72,12 @@ public class TokenStorageOptions
     public int BackupRetentionCount { get; set; } = 3;
 
     /// <summary>
+    /// Maximální počet tokenů v paměti
+    /// </summary>
+    [Range(1, 1000000)]
+    public int MaxTokenCount { get; set; } = 10000;
+
+    /// <summary>
     /// Validace konfigurace
     /// </summary>
     public void Validate()
@@ -90,6 +96,9 @@ public class TokenStorageOptions
 
         if (RefreshBeforeExpiryMinutes < 1 || RefreshBeforeExpiryMinutes > 60)
             throw new ArgumentException("RefreshBeforeExpiryMinutes must be between 1 and 60", nameof(RefreshBeforeExpiryMinutes));
+
+        if (MaxTokenCount < 1)
+            throw new ArgumentException("MaxTokenCount must be at least 1", nameof(MaxTokenCount));
 
         // Ensure storage path and key file path are valid
         try
