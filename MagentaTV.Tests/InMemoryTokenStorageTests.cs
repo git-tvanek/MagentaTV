@@ -99,10 +99,10 @@ public sealed class InMemoryTokenStorageTests
         await storage.SaveTokensAsync("1", new TokenData { AccessToken = "a", ExpiresAt = DateTime.UtcNow.AddHours(1) });
         _ = await storage.LoadTokensAsync("1");
 
-        cacheField = typeof(InMemoryTokenStorage).GetField("_cache", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        cache = (TokenCache)cacheField.GetValue(storage)!;
-        tokensField = typeof(TokenCache).GetField("_tokens", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        dict = (System.Collections.Concurrent.ConcurrentDictionary<string, TokenEntry>)tokensField.GetValue(cache)!;
+        var cacheField = typeof(InMemoryTokenStorage).GetField("_cache", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var cache = (TokenCache)cacheField.GetValue(storage)!;
+        var tokensField = typeof(TokenCache).GetField("_tokens", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var dict = (System.Collections.Concurrent.ConcurrentDictionary<string, TokenEntry>)tokensField.GetValue(cache)!;
 
         dict.TryGetValue("1", out var beforeEntry);
         var beforeCount = beforeEntry.AccessCount;

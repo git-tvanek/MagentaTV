@@ -207,6 +207,42 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves stream URLs for multiple channels.
+    /// </summary>
+    [HttpGet("stream/bulk")]
+    [ProducesResponseType(typeof(ApiResponse<Dictionary<int, string?>>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<string>), 401)]
+    public async Task<IActionResult> GetStreamUrlsBulk([FromQuery(Name = "ids")] string ids)
+    {
+        if (string.IsNullOrWhiteSpace(ids))
+        {
+            return BadRequest(ApiResponse<string>.ErrorResult("Invalid channel IDs"));
+        }
+
+        var parsed = ids.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => int.TryParse(s, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .ToList();
+
+        if (parsed.Count == 0)
+        {
+            return BadRequest(ApiResponse<string>.ErrorResult("Invalid channel IDs"));
+        }
+
+        try
+        {
+            var query = new GetStreamUrlsBulkQuery { ChannelIds = parsed };
+            var result = await _mediator.Send(query);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized(ApiResponse<string>.ErrorResult("Authentication required",
+                new List<string> { "Vyžaduje přihlášení" }));
+        }
+    }
+
+    /// <summary>
     /// Retrieves the catch-up streaming URL for the specified schedule entry.
     /// Requires an active session.
     /// </summary>

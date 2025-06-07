@@ -23,8 +23,8 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger, IOptions<TokenStorageOptions> options)
     {
         _logger = logger;
-        _cache = new TokenCache(options.Value.MaxTokenCount, _metrics, logger);
-        _expirationManager = new TokenExpirationManager(_cache, _metrics, logger);
+        _cache = new TokenCache(options.Value.MaxTokenCount, _metrics, null);
+        _expirationManager = new TokenExpirationManager(_cache, _metrics, null);
         _logger.LogInformation("InMemoryTokenStorage initialized - tokens will not persist across restarts");
     }
 
