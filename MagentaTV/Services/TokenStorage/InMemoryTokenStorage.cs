@@ -16,15 +16,21 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     private readonly ILogger<InMemoryTokenStorage> _logger;
     private readonly TokenExpirationManager _expirationManager;
     private readonly int _maxTokenCount;
+    private readonly TokenStorageMetrics _metrics = new();
     private const string DefaultSessionId = "default";
 
     public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger, IOptions<TokenStorageOptions> options)
     {
         _logger = logger;
         _maxTokenCount = options.Value.MaxTokenCount;
-        _expirationManager = new TokenExpirationManager(_tokens);
+        _expirationManager = new TokenExpirationManager(_tokens, _metrics);
         _logger.LogInformation("InMemoryTokenStorage initialized - tokens will not persist across restarts");
     }
+
+    /// <summary>
+    /// Exposes current metrics for diagnostics.
+    /// </summary>
+    public TokenStorageMetrics Metrics => _metrics;
 
     /// <summary>
     /// Uloží tokeny do paměti (výchozí session)
@@ -36,8 +42,14 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     /// </summary>
     public Task SaveTokensAsync(string sessionId, TokenData tokens)
     {
-        var entry = new TokenEntry(tokens);
-        _tokens.AddOrUpdate(sessionId, entry, (_, _) => entry);
+        _tokens.AddOrUpdate(sessionId,
+            _ => new TokenEntry(tokens),
+            (_, existing) =>
+            {
+                existing.Data = tokens;
+                existing.UpdateAccess();
+                return existing;
+            });
 
         _logger.LogDebug(
             "Tokens saved in memory for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
@@ -59,11 +71,14 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
             if (entry.Data.IsExpired)
             {
                 _tokens.TryRemove(sessionId, out _);
+                _metrics.IncrementExpiration();
+                _metrics.IncrementMiss();
                 _logger.LogDebug("Removed expired tokens for session {SessionId}", sessionId);
                 return Task.FromResult<TokenData?>(null);
             }
 
             entry.UpdateAccess();
+            _metrics.IncrementHit();
 
             _logger.LogDebug(
                 "Loading tokens from memory for session {SessionId}, user: {Username}, valid: {IsValid}",
@@ -71,6 +86,7 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
             return Task.FromResult<TokenData?>(entry.Data);
         }
 
+        _metrics.IncrementMiss();
         _logger.LogDebug("No tokens found in memory for session {SessionId}", sessionId);
         return Task.FromResult<TokenData?>(null);
     }
@@ -132,7 +148,10 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
 
         foreach (var key in oldest)
         {
-            _tokens.TryRemove(key, out _);
+            if (_tokens.TryRemove(key, out _))
+            {
+                _metrics.IncrementEviction();
+            }
         }
 
         if (oldest.Count > 0)
