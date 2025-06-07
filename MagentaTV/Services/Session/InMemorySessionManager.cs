@@ -88,7 +88,9 @@ public class InMemorySessionManager : ISessionManager, IDisposable
             _logger.LogInformation("Session created for user {Username}: {SessionId}, expires: {ExpiresAt}",
                 request.Username, sessionId, sessionData.ExpiresAt);
 
-            return sessionId;
+            // Regenerate ID to mitigate fixation
+            var newId = await RegenerateSessionIdAsync(sessionId);
+            return newId;
         }
         catch (Exception ex)
         {
@@ -238,6 +240,20 @@ public class InMemorySessionManager : ISessionManager, IDisposable
             HasValidTokens = session.HasValidTokens,
             TokensExpiresAt = session.Tokens?.ExpiresAt
         };
+    }
+
+    public Task<string> RegenerateSessionIdAsync(string sessionId)
+    {
+        if (!_sessions.TryRemove(sessionId, out var session))
+            return Task.FromResult(sessionId);
+
+        var newId = GenerateSessionId();
+        session.SessionId = newId;
+        _sessions[newId] = session;
+
+        _logger.LogDebug("Session ID regenerated: {OldId} -> {NewId}", sessionId, newId);
+
+        return Task.FromResult(newId);
     }
 
     public async Task CleanupExpiredSessionsAsync()

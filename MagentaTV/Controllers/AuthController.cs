@@ -4,6 +4,7 @@ using MagentaTV.Models.Session;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using MagentaTV.Extensions;
+using MagentaTV.Services.Security;
 
 namespace MagentaTV.Controllers
 {
@@ -17,11 +18,13 @@ namespace MagentaTV.Controllers
     {
         private readonly IMediator _mediator;
         private readonly ILogger<AuthController> _logger;
+        private readonly IInputSanitizer _sanitizer;
 
-        public AuthController(IMediator mediator, ILogger<AuthController> logger)
+        public AuthController(IMediator mediator, ILogger<AuthController> logger, IInputSanitizer sanitizer)
         {
             _mediator = mediator;
             _logger = logger;
+            _sanitizer = sanitizer;
         }
 
         /// <summary>
@@ -44,10 +47,14 @@ namespace MagentaTV.Controllers
                 return BadRequest(ApiResponse<string>.ErrorResult("Validation failed", errors));
             }
 
+            var sanitizedUser = _sanitizer.Sanitize(loginDto.Username);
+
+            using var securePassword = loginDto.GetSecurePassword();
+
             var command = new LoginCommand
             {
-                Username = loginDto.Username,
-                Password = loginDto.Password,
+                Username = sanitizedUser,
+                Password = securePassword,
                 RememberMe = loginDto.RememberMe,
                 SessionDurationHours = loginDto.SessionDurationHours,
                 IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",

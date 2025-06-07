@@ -49,6 +49,13 @@ namespace MagentaTV.Services.Session
         Task<SessionInfoDto?> GetSessionInfoAsync(string sessionId);
 
         /// <summary>
+        /// Regenerates the session identifier to mitigate fixation attacks.
+        /// </summary>
+        /// <param name="sessionId">Current session identifier.</param>
+        /// <returns>New regenerated identifier.</returns>
+        Task<string> RegenerateSessionIdAsync(string sessionId);
+
+        /// <summary>
         /// Vyčistí expirované sessions
         /// </summary>
         Task CleanupExpiredSessionsAsync();
