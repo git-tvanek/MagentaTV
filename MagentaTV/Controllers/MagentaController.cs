@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MagentaTV.Application.Commands;
 using MagentaTV.Application.Queries;
 using MagentaTV.Extensions;
@@ -80,6 +81,47 @@ public class MagentaController : ControllerBase
             var query = new GetEpgQuery
             {
                 ChannelId = channelId,
+                From = from,
+                To = to
+            };
+            var result = await _mediator.Send(query);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized(ApiResponse<string>.ErrorResult("Authentication required",
+                new List<string> { "Vyžaduje přihlášení" }));
+        }
+    }
+
+    /// <summary>
+    /// Returns the Electronic Program Guide for multiple channels.
+    /// </summary>
+    [HttpGet("epg/bulk")]
+    [ProducesResponseType(typeof(ApiResponse<Dictionary<int, List<EpgItemDto>>>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<string>), 401)]
+    public async Task<IActionResult> GetEpgBulk([FromQuery(Name = "ids")] string ids, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
+    {
+        if (string.IsNullOrWhiteSpace(ids))
+        {
+            return BadRequest(ApiResponse<string>.ErrorResult("Invalid channel IDs"));
+        }
+
+        var parsed = ids.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => int.TryParse(s, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .ToList();
+
+        if (parsed.Count == 0)
+        {
+            return BadRequest(ApiResponse<string>.ErrorResult("Invalid channel IDs"));
+        }
+
+        try
+        {
+            var query = new GetBulkEpgQuery
+            {
+                ChannelIds = parsed,
                 From = from,
                 To = to
             };
