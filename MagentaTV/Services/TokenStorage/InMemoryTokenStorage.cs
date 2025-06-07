@@ -1,6 +1,9 @@
 ﻿// MagentaTV/Services/TokenStorage/InMemoryTokenStorage.cs
 using System.Collections.Concurrent;
+using System.Linq;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using MagentaTV.Configuration;
 
 namespace MagentaTV.Services.TokenStorage;
 
@@ -10,15 +13,17 @@ namespace MagentaTV.Services.TokenStorage;
 /// </summary>
 public class InMemoryTokenStorage : ITokenStorage, IDisposable
 {
-    private readonly ConcurrentDictionary<string, TokenData> _tokens = new();
+    private readonly ConcurrentDictionary<string, TokenEntry> _tokens = new();
     private readonly ILogger<InMemoryTokenStorage> _logger;
     private readonly TokenExpirationManager _expirationManager;
+    private readonly int _maxTokenCount;
     private const string DefaultSessionId = "default";
 
-    public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger)
+    public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger, IOptions<TokenStorageOptions> options)
     {
         _logger = logger;
-        _expirationManager = new TokenExpirationManager(_tokens, _logger);
+        _maxTokenCount = options.Value.MaxTokenCount;
+        _expirationManager = new TokenExpirationManager(_tokens);
         _logger.LogInformation("InMemoryTokenStorage initialized - tokens will not persist across restarts");
     }
 
@@ -32,10 +37,14 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     /// </summary>
     public Task SaveTokensAsync(string sessionId, TokenData tokens)
     {
-        _tokens.AddOrUpdate(sessionId, tokens, (_, _) => tokens);
+        var entry = new TokenEntry(tokens);
+        _tokens.AddOrUpdate(sessionId, entry, (_, _) => entry);
+
         _logger.LogDebug(
             "Tokens saved in memory for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
             sessionId, tokens.Username, tokens.ExpiresAt);
+
+        EnforceLimit();
         return Task.CompletedTask;
     }
 
@@ -46,19 +55,21 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
 
     public Task<TokenData?> LoadTokensAsync(string sessionId)
     {
-        if (_tokens.TryGetValue(sessionId, out var data))
+        if (_tokens.TryGetValue(sessionId, out var entry))
         {
-            if (data.IsExpired)
+            if (entry.Data.IsExpired)
             {
                 _tokens.TryRemove(sessionId, out _);
                 _logger.LogDebug("Removed expired tokens for session {SessionId}", sessionId);
                 return Task.FromResult<TokenData?>(null);
             }
 
+            entry.UpdateAccess();
+
             _logger.LogDebug(
                 "Loading tokens from memory for session {SessionId}, user: {Username}, valid: {IsValid}",
-                sessionId, data.Username, data.IsValid);
-            return Task.FromResult<TokenData?>(data);
+                sessionId, entry.Data.Username, entry.Data.IsValid);
+            return Task.FromResult<TokenData?>(entry.Data);
         }
 
         _logger.LogDebug("No tokens found in memory for session {SessionId}", sessionId);
@@ -73,7 +84,7 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     public Task ClearTokensAsync(string sessionId)
     {
         _tokens.TryRemove(sessionId, out var removed);
-        var username = removed?.Username;
+        var username = removed?.Data.Username;
         _logger.LogDebug(
             "Tokens cleared from memory for session {SessionId}, user: {Username}",
             sessionId, username);
@@ -87,7 +98,7 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
 
     public Task<bool> HasValidTokensAsync(string sessionId)
     {
-        var hasValid = _tokens.TryGetValue(sessionId, out var data) && data.IsValid;
+        var hasValid = _tokens.TryGetValue(sessionId, out var entry) && entry.Data.IsValid;
         _logger.LogDebug("HasValidTokens check for {SessionId}: {HasValid}", sessionId, hasValid);
         return Task.FromResult(hasValid);
     }
@@ -97,15 +108,38 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     /// </summary>
     public TokenStatus GetTokenStatus(string sessionId = DefaultSessionId)
     {
-        _tokens.TryGetValue(sessionId, out var data);
+        _tokens.TryGetValue(sessionId, out var entry);
         return new TokenStatus
         {
-            HasTokens = data != null,
-            IsValid = data?.IsValid ?? false,
-            Username = data?.Username,
-            ExpiresAt = data?.ExpiresAt,
-            TimeToExpiry = data?.TimeToExpiry
+            HasTokens = entry != null,
+            IsValid = entry?.Data.IsValid ?? false,
+            Username = entry?.Data.Username,
+            ExpiresAt = entry?.Data.ExpiresAt,
+            TimeToExpiry = entry?.Data.TimeToExpiry
         };
+    }
+
+    private void EnforceLimit()
+    {
+        if (_tokens.Count < _maxTokenCount)
+            return;
+
+        var removeCount = Math.Max(1, _maxTokenCount / 10);
+        var oldest = _tokens
+            .OrderBy(kvp => kvp.Value.LastAccess)
+            .Take(removeCount)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var key in oldest)
+        {
+            _tokens.TryRemove(key, out _);
+        }
+
+        if (oldest.Count > 0)
+        {
+            _logger.LogDebug("Evicted {Count} token entries due to limit", oldest.Count);
+        }
     }
 
     public void Dispose()
