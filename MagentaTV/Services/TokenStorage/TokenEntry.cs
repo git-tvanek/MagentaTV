@@ -7,6 +7,7 @@ public class TokenEntry
 {
     public TokenData Data { get; set; }
     public DateTime LastAccess { get; private set; }
+    public int AccessCount { get; private set; }
 
     public TokenEntry(TokenData data)
     {
@@ -17,5 +18,6 @@ public class TokenEntry
     public void UpdateAccess()
     {
         LastAccess = DateTime.UtcNow;
+        AccessCount++;
     }
 }
