@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿// MagentaTV/Services/TokenStorage/InMemoryTokenStorage.cs
+using System.Linq;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,18 +13,18 @@ namespace MagentaTV.Services.TokenStorage;
 /// </summary>
 public class InMemoryTokenStorage : ITokenStorage, IDisposable
 {
-    private readonly ConcurrentDictionary<string, TokenEntry> _tokens = new();
+    private readonly TokenCache _cache;
     private readonly ILogger<InMemoryTokenStorage> _logger;
     private readonly TokenExpirationManager _expirationManager;
-    private readonly int _maxTokenCount;
     private readonly TokenStorageMetrics _metrics = new();
+    private bool _disposed;
     private const string DefaultSessionId = "default";
 
     public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger, IOptions<TokenStorageOptions> options)
     {
         _logger = logger;
-        _maxTokenCount = options.Value.MaxTokenCount;
-        _expirationManager = new TokenExpirationManager(_tokens, _metrics);
+        _cache = new TokenCache(options.Value.MaxTokenCount, _metrics, logger);
+        _expirationManager = new TokenExpirationManager(_cache, _metrics, logger);
         _logger.LogInformation("InMemoryTokenStorage initialized - tokens will not persist across restarts");
     }
 
@@ -42,20 +43,12 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     /// </summary>
     public Task SaveTokensAsync(string sessionId, TokenData tokens)
     {
-        _tokens.AddOrUpdate(sessionId,
-            _ => new TokenEntry(tokens),
-            (_, existing) =>
-            {
-                existing.Data = tokens;
-                existing.UpdateAccess();
-                return existing;
-            });
+        _cache.Save(sessionId, tokens);
 
         _logger.LogDebug(
             "Tokens saved in memory for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
             sessionId, tokens.Username, tokens.ExpiresAt);
 
-        EnforceLimit();
         return Task.CompletedTask;
     }
 
@@ -66,11 +59,11 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
 
     public Task<TokenData?> LoadTokensAsync(string sessionId)
     {
-        if (_tokens.TryGetValue(sessionId, out var entry))
+        if (_cache.TryGet(sessionId, out var entry))
         {
             if (entry.Data.IsExpired)
             {
-                _tokens.TryRemove(sessionId, out _);
+                _cache.TryRemove(sessionId, out _);
                 _metrics.IncrementExpiration();
                 _metrics.IncrementMiss();
                 _logger.LogDebug("Removed expired tokens for session {SessionId}", sessionId);
@@ -98,7 +91,7 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
 
     public Task ClearTokensAsync(string sessionId)
     {
-        _tokens.TryRemove(sessionId, out var removed);
+        _cache.TryRemove(sessionId, out var removed);
         var username = removed?.Data.Username;
         _logger.LogDebug(
             "Tokens cleared from memory for session {SessionId}, user: {Username}",
@@ -113,7 +106,7 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
 
     public Task<bool> HasValidTokensAsync(string sessionId)
     {
-        var hasValid = _tokens.TryGetValue(sessionId, out var entry) && entry.Data.IsValid;
+        var hasValid = _cache.TryGet(sessionId, out var entry) && entry.Data.IsValid;
         _logger.LogDebug("HasValidTokens check for {SessionId}: {HasValid}", sessionId, hasValid);
         return Task.FromResult(hasValid);
     }
@@ -123,7 +116,7 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     /// </summary>
     public TokenStatus GetTokenStatus(string sessionId = DefaultSessionId)
     {
-        _tokens.TryGetValue(sessionId, out var entry);
+        _cache.TryGet(sessionId, out var entry);
         return new TokenStatus
         {
             HasTokens = entry != null,
@@ -134,35 +127,28 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
         };
     }
 
-    private void EnforceLimit()
-    {
-        if (_tokens.Count < _maxTokenCount)
-            return;
-
-        var removeCount = Math.Max(1, _maxTokenCount / 10);
-        var oldest = _tokens
-            .OrderBy(kvp => kvp.Value.LastAccess)
-            .Take(removeCount)
-            .Select(kvp => kvp.Key)
-            .ToList();
-
-        foreach (var key in oldest)
-        {
-            if (_tokens.TryRemove(key, out _))
-            {
-                _metrics.IncrementEviction();
-            }
-        }
-
-        if (oldest.Count > 0)
-        {
-            _logger.LogDebug("Evicted {Count} token entries due to limit", oldest.Count);
-        }
-    }
-
     public void Dispose()
     {
-        _expirationManager.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            _expirationManager.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    ~InMemoryTokenStorage()
+    {
+        Dispose(false);
     }
 }
 

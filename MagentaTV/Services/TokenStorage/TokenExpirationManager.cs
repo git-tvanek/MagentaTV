@@ -1,6 +1,5 @@
 using System.Threading;
 
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
 namespace MagentaTV.Services.TokenStorage;
@@ -10,17 +9,18 @@ namespace MagentaTV.Services.TokenStorage;
 /// </summary>
 public class TokenExpirationManager : IDisposable
 {
-    private readonly ConcurrentDictionary<string, TokenEntry> _tokens;
+    private readonly TokenCache _cache;
     private readonly ILogger<TokenExpirationManager>? _logger;
     private readonly TokenStorageMetrics? _metrics;
     private readonly Timer _timer;
+    private bool _disposed;
 
     public TokenExpirationManager(
-        ConcurrentDictionary<string, TokenEntry> tokens,
+        TokenCache cache,
         TokenStorageMetrics? metrics = null,
         ILogger<TokenExpirationManager>? logger = null)
     {
-        _tokens = tokens;
+        _cache = cache;
         _logger = logger;
         _metrics = metrics;
         _timer = new Timer(_ => CleanupExpiredTokens(), null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
@@ -28,11 +28,11 @@ public class TokenExpirationManager : IDisposable
 
     private void CleanupExpiredTokens()
     {
-        foreach (var kvp in _tokens.ToArray())
+        foreach (var kvp in _cache.Entries)
         {
             if (kvp.Value.Data.IsExpired)
             {
-                if (_tokens.TryRemove(kvp.Key, out _))
+                if (_cache.TryRemove(kvp.Key, out _))
                 {
                     _metrics?.IncrementExpiration();
                     _logger?.LogDebug("Removed expired tokens for session {SessionId}", kvp.Key);
@@ -43,6 +43,25 @@ public class TokenExpirationManager : IDisposable
 
     public void Dispose()
     {
-        _timer.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            _timer.Dispose();
+        }
+
+        _disposed = true;
+    }
+
+    ~TokenExpirationManager()
+    {
+        Dispose(false);
     }
 }
