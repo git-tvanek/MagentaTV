@@ -31,7 +31,7 @@ public class EncryptedFileTokenStorage : ITokenStorage
         Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
 
         // Generate or load encryption key
-        _key = GetOrCreateEncryptionKey(config.KeyFilePath);
+        _key = GetOrCreateEncryptionKeyAsync(config.KeyFilePath).GetAwaiter().GetResult();
 
         _logger.LogInformation("EncryptedFileTokenStorage initialized. Storage path: {StoragePath}", config.StoragePath);
     }
@@ -175,7 +175,7 @@ public class EncryptedFileTokenStorage : ITokenStorage
     /// <summary>
     /// Získá nebo vytvoří encryption key
     /// </summary>
-    private byte[] GetOrCreateEncryptionKey(string keyFilePath)
+    private async Task<byte[]> GetOrCreateEncryptionKeyAsync(string keyFilePath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(keyFilePath)!);
 
@@ -183,7 +183,7 @@ public class EncryptedFileTokenStorage : ITokenStorage
         {
             try
             {
-                var keyData = File.ReadAllBytes(keyFilePath);
+                var keyData = await File.ReadAllBytesAsync(keyFilePath);
                 if (keyData.Length == 32) // 256-bit key
                 {
                     _logger.LogDebug("Using existing encryption key");
@@ -209,7 +209,7 @@ public class EncryptedFileTokenStorage : ITokenStorage
 
         try
         {
-            File.WriteAllBytes(keyFilePath, newKey);
+            await File.WriteAllBytesAsync(keyFilePath, newKey);
             _logger.LogInformation("Generated new encryption key at: {KeyFilePath}", keyFilePath);
         }
         catch (Exception ex)
