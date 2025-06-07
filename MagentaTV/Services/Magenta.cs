@@ -53,7 +53,7 @@ namespace MagentaTV.Services
             _tokenStorage = tokenStorage;
             _networkOptions = networkOptions.Value;
 
-            _devId = GetOrCreateDeviceId();
+            _devId = GetOrCreateDeviceIdAsync().GetAwaiter().GetResult();
             ConfigureHttpClient();
 
             // Auto-load tokens on startup if enabled
@@ -668,7 +668,7 @@ namespace MagentaTV.Services
             }
         }
 
-        private string GetOrCreateDeviceId()
+        private async Task<string> GetOrCreateDeviceIdAsync()
         {
             const string deviceIdFile = "dev_id.txt";
 
@@ -676,7 +676,7 @@ namespace MagentaTV.Services
             {
                 if (File.Exists(deviceIdFile))
                 {
-                    var deviceId = File.ReadAllText(deviceIdFile).Trim();
+                    var deviceId = (await File.ReadAllTextAsync(deviceIdFile)).Trim();
                     if (!string.IsNullOrEmpty(deviceId))
                     {
                         _logger.LogDebug("Using existing device ID: {DeviceId}", deviceId);
@@ -685,7 +685,7 @@ namespace MagentaTV.Services
                 }
 
                 var newDeviceId = Guid.NewGuid().ToString();
-                File.WriteAllText(deviceIdFile, newDeviceId);
+                await File.WriteAllTextAsync(deviceIdFile, newDeviceId);
                 _logger.LogInformation("Created new device ID: {DeviceId}", newDeviceId);
                 return newDeviceId;
             }
