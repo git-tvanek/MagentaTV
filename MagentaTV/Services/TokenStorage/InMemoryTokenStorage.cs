@@ -1,5 +1,6 @@
 ﻿// MagentaTV/Services/TokenStorage/InMemoryTokenStorage.cs
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using MagentaTV.Configuration;
 
@@ -21,8 +22,8 @@ public class InMemoryTokenStorage : ITokenStorage, IDisposable
     public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger, IOptions<TokenStorageOptions> options)
     {
         _logger = logger;
-        _cache = new TokenCache(options.Value.MaxTokenCount, _metrics, logger);
-        _expirationManager = new TokenExpirationManager(_cache, _metrics, logger);
+        _cache = new TokenCache(options.Value.MaxTokenCount, _metrics, NullLogger<TokenCache>.Instance);
+        _expirationManager = new TokenExpirationManager(_cache, _metrics, NullLogger<TokenExpirationManager>.Instance);
         _logger.LogInformation("InMemoryTokenStorage initialized - tokens will not persist across restarts");
     }
 
