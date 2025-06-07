@@ -22,6 +22,10 @@ using MagentaTV.Services.Network;
 using MagentaTV.Services.Cache;
 using MagentaTV.Services.Configuration;
 using MagentaTV.Services.Ffmpeg;
+using MagentaTV.Services.Security;
+using MagentaTV.Services.Middleware;
+using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.Mvc;
 using Spectre.Console;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -49,6 +53,15 @@ builder.Services.AddTransient<INotificationHandler<FfmpegJobCompletedEvent>, Ffm
 
 // Add services to the container
 builder.Services.AddControllers();
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
+builder.Services.AddOutputCache();
 builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -70,6 +83,7 @@ builder.Services.AddMediatRWithBehaviors();
 // Memory cache
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ICacheService, CacheService>();
+builder.Services.AddSingleton<IInputSanitizer, InputSanitizer>();
 builder.Services.AddFfmpeg(builder.Configuration);
 
 // Network configuration and service
@@ -221,6 +235,8 @@ if (app.Environment.IsDevelopment())
 // Security headers middleware
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
+app.UseResponseCompression();
+
 // Exception handling middleware
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
@@ -236,8 +252,9 @@ if (corsOptions?.AllowedOrigins?.Length > 0)
     app.UseCors();
 }
 
-// Rate limiting
+app.UseMiddleware<UserRateLimitingMiddleware>();
 app.UseRateLimiter();
+app.UseOutputCache();
 
 // Session validation is now handled solely by SessionValidationBehavior
 // app.UseMiddleware<SessionMiddleware>();

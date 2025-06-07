@@ -3,6 +3,7 @@ using MagentaTV.Models;
 using MagentaTV.Services.Session;
 using MagentaTV.Services.TokenStorage;
 using MagentaTV.Services;
+using MagentaTV.Extensions;
 using MediatR;
 using MagentaTV.Application.Events;
 
@@ -35,7 +36,8 @@ namespace MagentaTV.Application.Commands
             try
             {
                 // 1. Ověř credentials
-                var loginSuccess = await _magentaService.LoginAsync(request.Username, request.Password);
+                var pwd = request.Password.ToUnsecureString();
+                var loginSuccess = await _magentaService.LoginAsync(request.Username, pwd);
                 if (!loginSuccess)
                 {
                     return ApiResponse<SessionCreatedDto>.ErrorResult("Invalid credentials");
@@ -83,6 +85,10 @@ namespace MagentaTV.Application.Commands
             {
                 _logger.LogError(ex, "Login failed for user {Username}", request.Username);
                 return ApiResponse<SessionCreatedDto>.ErrorResult("Login failed");
+            }
+            finally
+            {
+                request.Password.Dispose();
             }
         }
     }

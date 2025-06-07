@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Security;
 
 namespace MagentaTV.Models.Session
 {
@@ -10,7 +11,7 @@ namespace MagentaTV.Models.Session
 
         [Required(ErrorMessage = "Password is required")]
         [StringLength(100, MinimumLength = 6)]
-        public string Password { get; set; } = string.Empty;
+        public SecureString Password { get; set; } = new();
 
         [Range(1, 168)] // 1 hour to 1 week
         public int? SessionDurationHours { get; set; }

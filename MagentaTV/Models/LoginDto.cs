@@ -1,4 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Security;
+using MagentaTV.Extensions;
 
 namespace MagentaTV.Models;
 
@@ -11,6 +13,12 @@ public class LoginDto : IValidatableObject
     [Required(ErrorMessage = "Password is required")]
     [StringLength(100, MinimumLength = 6, ErrorMessage = "Password must be between 6 and 100 characters")]
     public string Password { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Converts the plain text password to a <see cref="SecureString"/>.
+    /// Caller is responsible for disposing the returned instance.
+    /// </summary>
+    public SecureString GetSecurePassword() => Password.ToSecureString();
 
     /// <summary>
     /// Zapamatovat si přihlášení (dlouhodobá session)
