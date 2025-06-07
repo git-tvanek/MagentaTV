@@ -8,11 +8,11 @@ namespace MagentaTV.Services.TokenStorage;
 /// </summary>
 public class TokenExpirationManager : IDisposable
 {
-    private readonly ConcurrentDictionary<string, TokenData> _tokens;
-    private readonly ILogger<TokenExpirationManager> _logger;
+    private readonly ConcurrentDictionary<string, TokenEntry> _tokens;
+    private readonly ILogger<TokenExpirationManager>? _logger;
     private readonly Timer _timer;
 
-    public TokenExpirationManager(ConcurrentDictionary<string, TokenData> tokens, ILogger<TokenExpirationManager> logger)
+    public TokenExpirationManager(ConcurrentDictionary<string, TokenEntry> tokens, ILogger<TokenExpirationManager>? logger = null)
     {
         _tokens = tokens;
         _logger = logger;
@@ -23,11 +23,11 @@ public class TokenExpirationManager : IDisposable
     {
         foreach (var kvp in _tokens.ToArray())
         {
-            if (kvp.Value.IsExpired)
+            if (kvp.Value.Data.IsExpired)
             {
                 if (_tokens.TryRemove(kvp.Key, out _))
                 {
-                    _logger.LogDebug("Removed expired tokens for session {SessionId}", kvp.Key);
+                    _logger?.LogDebug("Removed expired tokens for session {SessionId}", kvp.Key);
                 }
             }
         }
