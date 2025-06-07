@@ -1,4 +1,4 @@
-﻿// MagentaTV/Services/TokenStorage/EncryptedFileTokenStorage.cs
+﻿using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -8,32 +8,58 @@ using MagentaTV.Configuration;
 namespace MagentaTV.Services.TokenStorage;
 
 /// <summary>
-/// Implementace token storage s šifrovaným ukládáním na disk
+/// Implementace token storage s šifrovaným ukládáním na disk - plně asynchronní verze
 /// </summary>
-public class EncryptedFileTokenStorage : ITokenStorage
+public class EncryptedFileTokenStorage : ITokenStorage, IAsyncDisposable
 {
     private readonly string _filePath;
-    private readonly byte[] _key;
+    private byte[]? _key;
     private readonly ILogger<EncryptedFileTokenStorage> _logger;
     private readonly SemaphoreSlim _fileLock = new(1, 1);
+    private readonly TokenStorageOptions _options;
+    private readonly ArrayPool<byte> _arrayPool = ArrayPool<byte>.Shared;
+    private bool _initialized = false;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
+
     private const string DefaultSessionId = "default";
+    private const int BufferSize = 4096;
 
     public EncryptedFileTokenStorage(
         ILogger<EncryptedFileTokenStorage> logger,
         IOptions<TokenStorageOptions> options)
     {
         _logger = logger;
-        var config = options.Value;
+        _options = options.Value;
+        _filePath = Path.Combine(_options.StoragePath, "tokens.enc");
 
-        _filePath = Path.Combine(config.StoragePath, "tokens.enc");
-
-        // Ensure directory exists
+        // Directory creation remains synchronous as there's no async alternative
         Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
 
-        // Generate or load encryption key
-        _key = GetOrCreateEncryptionKeyAsync(config.KeyFilePath).GetAwaiter().GetResult();
+        _logger.LogInformation("EncryptedFileTokenStorage created. Storage path: {StoragePath}", _options.StoragePath);
+    }
 
-        _logger.LogInformation("EncryptedFileTokenStorage initialized. Storage path: {StoragePath}", config.StoragePath);
+    /// <summary>
+    /// Ensures the storage is initialized with encryption key
+    /// </summary>
+    private async Task EnsureInitializedAsync()
+    {
+        if (_initialized && _key != null)
+            return;
+
+        await _initLock.WaitAsync();
+        try
+        {
+            if (_initialized && _key != null)
+                return;
+
+            _key = await GetOrCreateEncryptionKeyAsync(_options.KeyFilePath);
+            _initialized = true;
+            _logger.LogInformation("EncryptedFileTokenStorage initialized successfully");
+        }
+        finally
+        {
+            _initLock.Release();
+        }
     }
 
     private string GetSessionFilePath(string sessionId)
@@ -47,6 +73,14 @@ public class EncryptedFileTokenStorage : ITokenStorage
     }
 
     /// <summary>
+    /// Asynchronně zkontroluje existenci souboru
+    /// </summary>
+    private static async Task<bool> FileExistsAsync(string path)
+    {
+        return await Task.Run(() => File.Exists(path));
+    }
+
+    /// <summary>
     /// Uloží tokeny do šifrovaného souboru (výchozí session)
     /// </summary>
     public Task SaveTokensAsync(TokenData tokens) => SaveTokensAsync(DefaultSessionId, tokens);
@@ -56,6 +90,8 @@ public class EncryptedFileTokenStorage : ITokenStorage
     /// </summary>
     public async Task SaveTokensAsync(string sessionId, TokenData tokens)
     {
+        await EnsureInitializedAsync();
+
         var path = GetSessionFilePath(sessionId);
         await _fileLock.WaitAsync();
         try
@@ -66,8 +102,19 @@ public class EncryptedFileTokenStorage : ITokenStorage
                 WriteIndented = false
             });
 
-            var encryptedData = Encrypt(json);
-            await File.WriteAllBytesAsync(path, encryptedData);
+            var encryptedData = await EncryptAsync(json);
+
+            // Use FileStream with async operations
+            await using var fileStream = new FileStream(
+                path,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                BufferSize,
+                useAsync: true);
+
+            await fileStream.WriteAsync(encryptedData);
+            await fileStream.FlushAsync();
 
             _logger.LogDebug("Tokens saved successfully for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
                 sessionId, tokens.Username, tokens.ExpiresAt);
@@ -90,18 +137,31 @@ public class EncryptedFileTokenStorage : ITokenStorage
 
     public async Task<TokenData?> LoadTokensAsync(string sessionId)
     {
+        await EnsureInitializedAsync();
+
         var path = GetSessionFilePath(sessionId);
         await _fileLock.WaitAsync();
         try
         {
-            if (!File.Exists(path))
+            if (!await FileExistsAsync(path))
             {
                 _logger.LogDebug("Token file does not exist: {FilePath}", path);
                 return null;
             }
 
-            var encryptedData = await File.ReadAllBytesAsync(path);
-            var json = Decrypt(encryptedData);
+            // Use FileStream with async operations
+            await using var fileStream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                BufferSize,
+                useAsync: true);
+
+            var encryptedData = new byte[fileStream.Length];
+            await fileStream.ReadAsync(encryptedData);
+
+            var json = await DecryptAsync(encryptedData);
 
             var tokens = JsonSerializer.Deserialize<TokenData>(json, new JsonSerializerOptions
             {
@@ -145,9 +205,10 @@ public class EncryptedFileTokenStorage : ITokenStorage
         await _fileLock.WaitAsync();
         try
         {
-            if (File.Exists(path))
+            if (await FileExistsAsync(path))
             {
-                File.Delete(path);
+                // Async file deletion
+                await Task.Run(() => File.Delete(path));
                 _logger.LogDebug("Tokens cleared successfully for session {SessionId}", sessionId);
             }
         }
@@ -173,17 +234,28 @@ public class EncryptedFileTokenStorage : ITokenStorage
     }
 
     /// <summary>
-    /// Získá nebo vytvoří encryption key
+    /// Získá nebo vytvoří encryption key - plně asynchronní
     /// </summary>
     private async Task<byte[]> GetOrCreateEncryptionKeyAsync(string keyFilePath)
     {
+        // Directory creation remains synchronous
         Directory.CreateDirectory(Path.GetDirectoryName(keyFilePath)!);
 
-        if (File.Exists(keyFilePath))
+        if (await FileExistsAsync(keyFilePath))
         {
             try
             {
-                var keyData = await File.ReadAllBytesAsync(keyFilePath);
+                await using var fileStream = new FileStream(
+                    keyFilePath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    BufferSize,
+                    useAsync: true);
+
+                var keyData = new byte[fileStream.Length];
+                await fileStream.ReadAsync(keyData);
+
                 if (keyData.Length == 32) // 256-bit key
                 {
                     _logger.LogDebug("Using existing encryption key");
@@ -209,7 +281,17 @@ public class EncryptedFileTokenStorage : ITokenStorage
 
         try
         {
-            await File.WriteAllBytesAsync(keyFilePath, newKey);
+            await using var fileStream = new FileStream(
+                keyFilePath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                BufferSize,
+                useAsync: true);
+
+            await fileStream.WriteAsync(newKey);
+            await fileStream.FlushAsync();
+
             _logger.LogInformation("Generated new encryption key at: {KeyFilePath}", keyFilePath);
         }
         catch (Exception ex)
@@ -222,34 +304,41 @@ public class EncryptedFileTokenStorage : ITokenStorage
     }
 
     /// <summary>
-    /// Zašifruje text pomocí AES-256
+    /// Asynchronně zašifruje text pomocí AES-256
     /// </summary>
-    private byte[] Encrypt(string plainText)
+    private async Task<byte[]> EncryptAsync(string plainText)
     {
+        if (_key == null)
+            throw new InvalidOperationException("Encryption key not initialized");
+
         using var aes = Aes.Create();
         aes.Key = _key;
         aes.GenerateIV();
 
         using var encryptor = aes.CreateEncryptor();
-        using var msEncrypt = new MemoryStream();
+        await using var msEncrypt = new MemoryStream();
 
         // Write IV first (16 bytes)
-        msEncrypt.Write(aes.IV, 0, aes.IV.Length);
+        await msEncrypt.WriteAsync(aes.IV);
 
-        using (var csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write))
-        using (var swEncrypt = new StreamWriter(csEncrypt, Encoding.UTF8))
+        await using (var csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write))
+        await using (var swEncrypt = new StreamWriter(csEncrypt, Encoding.UTF8))
         {
-            swEncrypt.Write(plainText);
+            await swEncrypt.WriteAsync(plainText);
+            await swEncrypt.FlushAsync();
         }
 
         return msEncrypt.ToArray();
     }
 
     /// <summary>
-    /// Dešifruje data pomocí AES-256
+    /// Asynchronně dešifruje data pomocí AES-256
     /// </summary>
-    private string Decrypt(byte[] cipherData)
+    private async Task<string> DecryptAsync(byte[] cipherData)
     {
+        if (_key == null)
+            throw new InvalidOperationException("Encryption key not initialized");
+
         if (cipherData.Length < 16)
         {
             throw new CryptographicException("Cipher data is too short to contain a valid IV");
@@ -264,11 +353,11 @@ public class EncryptedFileTokenStorage : ITokenStorage
         aes.IV = iv;
 
         using var decryptor = aes.CreateDecryptor();
-        using var msDecrypt = new MemoryStream(cipherData, 16, cipherData.Length - 16);
-        using var csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read);
+        await using var msDecrypt = new MemoryStream(cipherData, 16, cipherData.Length - 16);
+        await using var csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read);
         using var srDecrypt = new StreamReader(csDecrypt, Encoding.UTF8);
 
-        return srDecrypt.ReadToEnd();
+        return await srDecrypt.ReadToEndAsync();
     }
 
     /// <summary>
@@ -276,6 +365,31 @@ public class EncryptedFileTokenStorage : ITokenStorage
     /// </summary>
     public void Dispose()
     {
-        _fileLock?.Dispose();
+        DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Async dispose pattern
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_fileLock != null)
+        {
+            await _fileLock.WaitAsync();
+            try
+            {
+                _fileLock.Dispose();
+            }
+            catch { }
+        }
+
+        _initLock?.Dispose();
+
+        // Clear sensitive data
+        if (_key != null)
+        {
+            Array.Clear(_key, 0, _key.Length);
+            _key = null;
+        }
     }
 }

@@ -1,5 +1,4 @@
-﻿// MagentaTV/Services/TokenStorage/InMemoryTokenStorage.cs
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 
 namespace MagentaTV.Services.TokenStorage;
