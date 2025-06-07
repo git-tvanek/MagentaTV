@@ -28,5 +28,39 @@ public sealed class InMemoryTokenStorageTests
 
         var removed = await storage.LoadTokensAsync("2");
         Assert.IsNull(removed);
+
+        Assert.AreEqual(2, storage.Metrics.Evictions);
+    }
+
+    [TestMethod]
+    public async Task LoadTokensAsync_IncrementsHitAndMissCounters()
+    {
+        var options = Options.Create(new TokenStorageOptions { MaxTokenCount = 10 });
+        var storage = new InMemoryTokenStorage(new NullLogger<InMemoryTokenStorage>(), options);
+
+        await storage.SaveTokensAsync("1", new TokenData { AccessToken = "a", ExpiresAt = DateTime.UtcNow.AddHours(1) });
+
+        var hit = await storage.LoadTokensAsync("1");
+        var miss = await storage.LoadTokensAsync("missing");
+
+        Assert.IsNotNull(hit);
+        Assert.IsNull(miss);
+        Assert.AreEqual(1, storage.Metrics.Hits);
+        Assert.AreEqual(1, storage.Metrics.Misses);
+    }
+
+    [TestMethod]
+    public async Task LoadTokensAsync_RemovesExpiredTokensAndUpdatesMetrics()
+    {
+        var options = Options.Create(new TokenStorageOptions { MaxTokenCount = 10 });
+        var storage = new InMemoryTokenStorage(new NullLogger<InMemoryTokenStorage>(), options);
+
+        await storage.SaveTokensAsync("1", new TokenData { AccessToken = "a", ExpiresAt = DateTime.UtcNow.AddMilliseconds(-1) });
+
+        var result = await storage.LoadTokensAsync("1");
+
+        Assert.IsNull(result);
+        Assert.AreEqual(1, storage.Metrics.Expirations);
+        Assert.AreEqual(1, storage.Metrics.Misses);
     }
 }
