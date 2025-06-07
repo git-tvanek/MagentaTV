@@ -11,7 +11,6 @@ public class InMemoryTokenStorage : ITokenStorage
 {
     private readonly ConcurrentDictionary<string, TokenData> _tokens = new();
     private readonly ILogger<InMemoryTokenStorage> _logger;
-    private readonly object _lock = new();
     private const string DefaultSessionId = "default";
 
     public InMemoryTokenStorage(ILogger<InMemoryTokenStorage> logger)
@@ -30,12 +29,10 @@ public class InMemoryTokenStorage : ITokenStorage
     /// </summary>
     public Task SaveTokensAsync(string sessionId, TokenData tokens)
     {
-        lock (_lock)
-        {
-            _tokens[sessionId] = tokens;
-            _logger.LogDebug("Tokens saved in memory for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
-                sessionId, tokens.Username, tokens.ExpiresAt);
-        }
+        _tokens.AddOrUpdate(sessionId, tokens, (_, _) => tokens);
+        _logger.LogDebug(
+            "Tokens saved in memory for session {SessionId}, user: {Username}, expires: {ExpiresAt}",
+            sessionId, tokens.Username, tokens.ExpiresAt);
         return Task.CompletedTask;
     }
 
@@ -46,18 +43,16 @@ public class InMemoryTokenStorage : ITokenStorage
 
     public Task<TokenData?> LoadTokensAsync(string sessionId)
     {
-        lock (_lock)
+        if (_tokens.TryGetValue(sessionId, out var data))
         {
-            if (_tokens.TryGetValue(sessionId, out var data))
-            {
-                _logger.LogDebug("Loading tokens from memory for session {SessionId}, user: {Username}, valid: {IsValid}",
-                    sessionId, data.Username, data.IsValid);
-                return Task.FromResult<TokenData?>(data);
-            }
-
-            _logger.LogDebug("No tokens found in memory for session {SessionId}", sessionId);
-            return Task.FromResult<TokenData?>(null);
+            _logger.LogDebug(
+                "Loading tokens from memory for session {SessionId}, user: {Username}, valid: {IsValid}",
+                sessionId, data.Username, data.IsValid);
+            return Task.FromResult<TokenData?>(data);
         }
+
+        _logger.LogDebug("No tokens found in memory for session {SessionId}", sessionId);
+        return Task.FromResult<TokenData?>(null);
     }
 
     /// <summary>
@@ -67,12 +62,11 @@ public class InMemoryTokenStorage : ITokenStorage
 
     public Task ClearTokensAsync(string sessionId)
     {
-        lock (_lock)
-        {
-            _tokens.TryRemove(sessionId, out var removed);
-            var username = removed?.Username;
-            _logger.LogDebug("Tokens cleared from memory for session {SessionId}, user: {Username}", sessionId, username);
-        }
+        _tokens.TryRemove(sessionId, out var removed);
+        var username = removed?.Username;
+        _logger.LogDebug(
+            "Tokens cleared from memory for session {SessionId}, user: {Username}",
+            sessionId, username);
         return Task.CompletedTask;
     }
 
@@ -83,12 +77,9 @@ public class InMemoryTokenStorage : ITokenStorage
 
     public Task<bool> HasValidTokensAsync(string sessionId)
     {
-        lock (_lock)
-        {
-            var hasValid = _tokens.TryGetValue(sessionId, out var data) && data.IsValid;
-            _logger.LogDebug("HasValidTokens check for {SessionId}: {HasValid}", sessionId, hasValid);
-            return Task.FromResult(hasValid);
-        }
+        var hasValid = _tokens.TryGetValue(sessionId, out var data) && data.IsValid;
+        _logger.LogDebug("HasValidTokens check for {SessionId}: {HasValid}", sessionId, hasValid);
+        return Task.FromResult(hasValid);
     }
 
     /// <summary>
@@ -96,18 +87,15 @@ public class InMemoryTokenStorage : ITokenStorage
     /// </summary>
     public TokenStatus GetTokenStatus(string sessionId = DefaultSessionId)
     {
-        lock (_lock)
+        _tokens.TryGetValue(sessionId, out var data);
+        return new TokenStatus
         {
-            _tokens.TryGetValue(sessionId, out var data);
-            return new TokenStatus
-            {
-                HasTokens = data != null,
-                IsValid = data?.IsValid ?? false,
-                Username = data?.Username,
-                ExpiresAt = data?.ExpiresAt,
-                TimeToExpiry = data?.TimeToExpiry
-            };
-        }
+            HasTokens = data != null,
+            IsValid = data?.IsValid ?? false,
+            Username = data?.Username,
+            ExpiresAt = data?.ExpiresAt,
+            TimeToExpiry = data?.TimeToExpiry
+        };
     }
 }
 
