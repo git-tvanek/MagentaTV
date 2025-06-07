@@ -61,6 +61,42 @@ public class MagentaController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves specific channels by their IDs.
+    /// </summary>
+    [HttpGet("channels/bulk")]
+    [ProducesResponseType(typeof(ApiResponse<List<ChannelDto>>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<string>), 401)]
+    public async Task<IActionResult> GetChannelsBulk([FromQuery(Name = "ids")] string ids)
+    {
+        if (string.IsNullOrWhiteSpace(ids))
+        {
+            return BadRequest(ApiResponse<string>.ErrorResult("Invalid channel IDs"));
+        }
+
+        var parsed = ids.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => int.TryParse(s, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .ToList();
+
+        if (parsed.Count == 0)
+        {
+            return BadRequest(ApiResponse<string>.ErrorResult("Invalid channel IDs"));
+        }
+
+        try
+        {
+            var query = new GetChannelsBulkQuery { ChannelIds = parsed };
+            var result = await _mediator.Send(query);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized(ApiResponse<string>.ErrorResult("Authentication required",
+                new List<string> { "Vyžaduje přihlášení" }));
+        }
+    }
+
+    /// <summary>
     /// Returns the Electronic Program Guide for the specified channel. Requires
     /// an active session.
     /// </summary>

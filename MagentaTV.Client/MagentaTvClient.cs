@@ -54,6 +54,15 @@ public class MagentaTvClient
                ?? new ApiResponse<List<ChannelDto>> { Success = false, Message = "Invalid response" };
     }
 
+    public async Task<ApiResponse<List<ChannelDto>>> GetChannelsBulkAsync(IEnumerable<int> channelIds)
+    {
+        var idList = string.Join(',', channelIds);
+        var response = await _httpClient.GetAsync($"magenta/channels/bulk?ids={idList}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ApiResponse<List<ChannelDto>>>()
+               ?? new ApiResponse<List<ChannelDto>> { Success = false, Message = "Invalid response" };
+    }
+
     public async Task<ApiResponse<List<EpgItemDto>>> GetEpgAsync(int channelId, DateTime? from = null, DateTime? to = null)
     {
         var url = $"magenta/epg/{channelId}";
