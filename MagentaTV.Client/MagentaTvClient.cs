@@ -1,4 +1,5 @@
 using System.Net;
+using System.Collections.Generic;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Net.Sockets;
@@ -65,6 +66,20 @@ public class MagentaTvClient
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ApiResponse<List<EpgItemDto>>>()
                ?? new ApiResponse<List<EpgItemDto>> { Success = false, Message = "Invalid response" };
+    }
+
+    public async Task<ApiResponse<Dictionary<int, List<EpgItemDto>>>> GetEpgBulkAsync(IEnumerable<int> channelIds, DateTime? from = null, DateTime? to = null)
+    {
+        var idList = string.Join(",", channelIds);
+        var query = new List<string> { $"ids={idList}" };
+        if (from.HasValue) query.Add($"from={from:O}");
+        if (to.HasValue) query.Add($"to={to:O}");
+        var url = "magenta/epg/bulk?" + string.Join("&", query);
+
+        var response = await _httpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<ApiResponse<Dictionary<int, List<EpgItemDto>>>>()
+               ?? new ApiResponse<Dictionary<int, List<EpgItemDto>>> { Success = false, Message = "Invalid response" };
     }
 
     public async Task<ApiResponse<StreamUrlDto>> GetStreamUrlAsync(int channelId)
